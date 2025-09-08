@@ -8,6 +8,13 @@ import RegisterPage from '../../pages/Register/RegisterPage';
 import DashboardPage from '../../pages/Dashboard/DashboardPage';
 import QRGeneratorPage from '../../pages/QRGenerator/QRGeneratorPage';
 import QRScanPage from '../../pages/AttendanceCheck/QRScanPage';
+import GPSVerificationPage from '../../pages/AttendanceCheck/GPSVerificationPage';
+import AttendanceRecordsPage from '../../pages/Student/AttendanceRecordsPage';
+import MyCoursesPage from '../../pages/Student/MyCoursesPage';
+import LocationTestPage from '../../pages/Student/LocationTestPage';
+import AttendanceSessionsPage from '../../pages/Professor/AttendanceSessionsPage';
+import AttendanceStatisticsPage from '../../pages/Professor/AttendanceStatisticsPage';
+import CoursesManagePage from '../../pages/Professor/CoursesManagePage';
 
 // 로딩 컴포넌트
 const LoadingSpinner: React.FC = () => (
@@ -140,7 +147,7 @@ const AppRouter: React.FC = () => {
         path="/courses" 
         element={
           <RoleProtectedRoute allowedRoles={['professor']}>
-            <PlaceholderPage title="강의 관리" description="강의를 생성하고 관리하는 페이지입니다." />
+            <CoursesManagePage />
           </RoleProtectedRoute>
         } 
       />
@@ -153,10 +160,18 @@ const AppRouter: React.FC = () => {
         } 
       />
       <Route 
+        path="/courses/:courseId/stats" 
+        element={
+          <RoleProtectedRoute allowedRoles={['professor']}>
+            <AttendanceStatisticsPage />
+          </RoleProtectedRoute>
+        } 
+      />
+      <Route 
         path="/attendance/sessions" 
         element={
           <RoleProtectedRoute allowedRoles={['professor']}>
-            <PlaceholderPage title="출석 세션 관리" description="출석 세션을 관리하는 페이지입니다." />
+            <AttendanceSessionsPage />
           </RoleProtectedRoute>
         } 
       />
@@ -172,7 +187,7 @@ const AppRouter: React.FC = () => {
         path="/statistics" 
         element={
           <RoleProtectedRoute allowedRoles={['professor']}>
-            <PlaceholderPage title="출석 통계" description="강의별 출석 통계를 보는 페이지입니다." />
+            <AttendanceStatisticsPage />
           </RoleProtectedRoute>
         } 
       />
@@ -182,7 +197,7 @@ const AppRouter: React.FC = () => {
         path="/my-courses" 
         element={
           <RoleProtectedRoute allowedRoles={['student']}>
-            <PlaceholderPage title="수강 강의" description="수강 중인 강의 목록 페이지입니다." />
+            <MyCoursesPage />
           </RoleProtectedRoute>
         } 
       />
@@ -198,7 +213,7 @@ const AppRouter: React.FC = () => {
         path="/attendance/records" 
         element={
           <RoleProtectedRoute allowedRoles={['student']}>
-            <PlaceholderPage title="출석 현황" description="나의 출석 기록을 확인하는 페이지입니다." />
+            <AttendanceRecordsPage />
           </RoleProtectedRoute>
         } 
       />
@@ -206,7 +221,15 @@ const AppRouter: React.FC = () => {
         path="/location-test" 
         element={
           <RoleProtectedRoute allowedRoles={['student']}>
-            <PlaceholderPage title="위치 테스트" description="GPS 위치를 확인하는 페이지입니다." />
+            <LocationTestPage />
+          </RoleProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/attendance/gps-verify/:recordId" 
+        element={
+          <RoleProtectedRoute allowedRoles={['student']}>
+            <GPSVerificationPage />
           </RoleProtectedRoute>
         } 
       />

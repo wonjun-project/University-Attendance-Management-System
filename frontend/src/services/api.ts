@@ -315,6 +315,97 @@ class ApiClient {
     throw new Error(response.data.error?.message || '출석 통계를 가져올 수 없습니다.');
   }
 
+  async getMyAttendanceRecords(courseId?: string, limit = 50, offset = 0): Promise<{
+    records: any[];
+    stats: any;
+    pagination: any;
+  }> {
+    const params: any = { limit, offset };
+    if (courseId) params.courseId = courseId;
+
+    const response: AxiosResponse<ApiResponse<{
+      records: any[];
+      stats: any;
+      pagination: any;
+    }>> = await this.client.get('/api/attendance/my-records', { params });
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || '출석 기록을 가져올 수 없습니다.');
+  }
+
+  async getMyAttendanceStats(): Promise<{
+    courseStats: any[];
+    totalStats: any;
+  }> {
+    const response: AxiosResponse<ApiResponse<{
+      courseStats: any[];
+      totalStats: any;
+    }>> = await this.client.get('/api/attendance/my-stats');
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || '출석 통계를 가져올 수 없습니다.');
+  }
+
+  async getProfessorSessions(courseId?: string, limit = 20, offset = 0): Promise<{
+    sessions: any[];
+    pagination: any;
+  }> {
+    const params: any = { limit, offset };
+    if (courseId) params.courseId = courseId;
+
+    const response: AxiosResponse<ApiResponse<{
+      sessions: any[];
+      pagination: any;
+    }>> = await this.client.get('/api/attendance/professor/sessions', { params });
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || '출석 세션을 가져올 수 없습니다.');
+  }
+
+  async getCourseAttendanceStats(courseId: string): Promise<{
+    courseInfo: any;
+    overallStats: any;
+    studentStats: any[];
+    sessionStats: any[];
+  }> {
+    const response: AxiosResponse<ApiResponse<{
+      courseInfo: any;
+      overallStats: any;
+      studentStats: any[];
+      sessionStats: any[];
+    }>> = await this.client.get(`/api/attendance/professor/course-stats/${courseId}`);
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || '강의 출석 통계를 가져올 수 없습니다.');
+  }
+
+  async updateManualAttendance(sessionId: string, studentId: string, status: string, reason?: string): Promise<any> {
+    const response: AxiosResponse<ApiResponse<any>> = await this.client.put('/api/attendance/professor/manual-attendance', {
+      sessionId,
+      studentId,
+      status,
+      reason
+    });
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || '수동 출석 처리에 실패했습니다.');
+  }
+
   // 현재 로그인 상태 확인
   isAuthenticated(): boolean {
     return !!this.accessToken;
