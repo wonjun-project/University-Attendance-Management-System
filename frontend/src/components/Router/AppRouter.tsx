@@ -6,6 +6,8 @@ import MainLayout from '../Layout/MainLayout';
 import LoginPage from '../../pages/Login/LoginPage';
 import RegisterPage from '../../pages/Register/RegisterPage';
 import DashboardPage from '../../pages/Dashboard/DashboardPage';
+import QRGeneratorPage from '../../pages/QRGenerator/QRGeneratorPage';
+import QRScanPage from '../../pages/AttendanceCheck/QRScanPage';
 
 // 로딩 컴포넌트
 const LoadingSpinner: React.FC = () => (
@@ -162,7 +164,7 @@ const AppRouter: React.FC = () => {
         path="/qr-generator" 
         element={
           <RoleProtectedRoute allowedRoles={['professor']}>
-            <PlaceholderPage title="QR 코드 생성" description="출석용 QR 코드를 생성하는 페이지입니다." />
+            <QRGeneratorPage />
           </RoleProtectedRoute>
         } 
       />
@@ -188,7 +190,7 @@ const AppRouter: React.FC = () => {
         path="/attendance/scan" 
         element={
           <RoleProtectedRoute allowedRoles={['student']}>
-            <PlaceholderPage title="출석 체크" description="QR 코드를 스캔하여 출석을 체크하는 페이지입니다." />
+            <QRScanPage />
           </RoleProtectedRoute>
         } 
       />

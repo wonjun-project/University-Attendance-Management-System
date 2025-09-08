@@ -240,6 +240,48 @@ class ApiClient {
     throw new Error(response.data.error?.message || '출석 세션을 가져올 수 없습니다.');
   }
 
+  async createAttendanceSession(sessionData: {
+    courseId: string;
+    sessionDate: string;
+    authCode?: string;
+  }): Promise<any> {
+    const response: AxiosResponse<ApiResponse<{ session: any }>> = 
+      await this.client.post('/api/attendance/sessions', sessionData);
+
+    if (response.data.success && response.data.data?.session) {
+      return response.data.data.session;
+    }
+
+    throw new Error(response.data.error?.message || '출석 세션 생성에 실패했습니다.');
+  }
+
+  async generateQRCode(sessionId: string, options?: { width?: number; height?: number }): Promise<{
+    qrCodeImage: string;
+    sessionInfo: any;
+  }> {
+    const response: AxiosResponse<ApiResponse<{
+      qrCodeImage: string;
+      sessionInfo: any;
+    }>> = await this.client.post(`/api/attendance/sessions/${sessionId}/generate-qr`, options || {});
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || 'QR 코드 생성에 실패했습니다.');
+  }
+
+  async activateSession(sessionId: string, isActive: boolean): Promise<any> {
+    const response: AxiosResponse<ApiResponse<{ session: any }>> = 
+      await this.client.put(`/api/attendance/sessions/${sessionId}/activate`, { isActive });
+
+    if (response.data.success && response.data.data?.session) {
+      return response.data.data.session;
+    }
+
+    throw new Error(response.data.error?.message || '세션 상태 변경에 실패했습니다.');
+  }
+
   async checkAttendance(qrCode: string): Promise<any> {
     const response: AxiosResponse<ApiResponse<any>> = 
       await this.client.post('/api/attendance/check', { qrCode });
@@ -249,6 +291,28 @@ class ApiClient {
     }
 
     throw new Error(response.data.error?.message || '출석 체크에 실패했습니다.');
+  }
+
+  async getAttendanceRecords(courseId: string): Promise<any[]> {
+    const response: AxiosResponse<ApiResponse<{ records: any[] }>> = 
+      await this.client.get(`/api/attendance/records/${courseId}`);
+
+    if (response.data.success && response.data.data?.records) {
+      return response.data.data.records;
+    }
+
+    throw new Error(response.data.error?.message || '출석 기록을 가져올 수 없습니다.');
+  }
+
+  async getAttendanceStats(courseId: string): Promise<any> {
+    const response: AxiosResponse<ApiResponse<{ stats: any }>> = 
+      await this.client.get(`/api/attendance/stats/${courseId}`);
+
+    if (response.data.success && response.data.data?.stats) {
+      return response.data.data.stats;
+    }
+
+    throw new Error(response.data.error?.message || '출석 통계를 가져올 수 없습니다.');
   }
 
   // 현재 로그인 상태 확인

@@ -1,6 +1,13 @@
 import express from 'express';
 import { supabase } from '../config/supabase';
 import { authenticateToken, requireProfessor, requireStudent } from '../middleware/auth';
+import { 
+  generateQRCodeString, 
+  generateQRCodeImage, 
+  validateQRCode,
+  calculateExpirationTime,
+  isQRCodeExpired 
+} from '../utils/qrCode';
 
 const router = express.Router();
 
@@ -132,16 +139,16 @@ router.post('/sessions', authenticateToken, requireProfessor, async (req, res, n
       });
     }
 
-    // 임시 QR 코드 생성 (실제로는 QR 코드 생성 라이브러리 사용)
-    const qrCode = `qr-${courseId}-${sessionDate}-${Date.now()}`;
+    // 고품질 QR 코드 생성
+    const qrCodeString = generateQRCodeString(courseId, sessionDate);
     
     // 인증 코드가 없으면 랜덤 생성
     const finalAuthCode = authCode || Math.floor(1000 + Math.random() * 9000).toString();
 
-    // QR 코드와 인증 코드 만료 시간 설정 (30분, 70분 후)
+    // QR 코드와 인증 코드 만료 시간 설정
     const now = new Date();
-    const qrExpiresAt = new Date(now.getTime() + 40 * 60 * 1000); // 40분
-    const authExpiresAt = new Date(now.getTime() + 70 * 60 * 1000); // 70분
+    const qrExpiresAt = calculateExpirationTime(now, 40); // 40분
+    const authExpiresAt = calculateExpirationTime(now, 70); // 70분
 
     // 출석 세션 생성
     const { data: newSession, error } = await supabase
@@ -149,11 +156,11 @@ router.post('/sessions', authenticateToken, requireProfessor, async (req, res, n
       .insert([{
         course_id: courseId,
         session_date: sessionDate,
-        qr_code: qrCode,
+        qr_code: qrCodeString,
         auth_code: finalAuthCode,
         qr_expires_at: qrExpiresAt.toISOString(),
         auth_expires_at: authExpiresAt.toISOString(),
-        is_active: false // 기본적으로 비활성 상태로 생성
+        is_active: false
       }])
       .select()
       .single();
@@ -168,6 +175,94 @@ router.post('/sessions', authenticateToken, requireProfessor, async (req, res, n
     });
 
   } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/attendance/sessions/:sessionId/generate-qr
+ * QR 코드 이미지 생성 (교수 전용)
+ */
+router.post('/sessions/:sessionId/generate-qr', authenticateToken, requireProfessor, async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+    const professorId = req.user!.userId;
+    const { width = 300, height = 300 } = req.body;
+
+    // 세션 소유권 확인
+    const { data: session, error: sessionError } = await supabase
+      .from('attendance_sessions')
+      .select(`
+        *,
+        courses (
+          professor_id,
+          name
+        )
+      `)
+      .eq('id', sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: '출석 세션을 찾을 수 없습니다.',
+          statusCode: 404,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (session.courses.professor_id !== professorId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: '해당 세션에 대한 권한이 없습니다.',
+          statusCode: 403,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // QR 코드 만료 확인
+    if (isQRCodeExpired(new Date(session.qr_expires_at))) {
+      return res.status(410).json({
+        success: false,
+        error: {
+          message: 'QR 코드가 만료되었습니다. 새로운 세션을 생성해주세요.',
+          statusCode: 410,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // QR 코드 이미지 생성
+    const qrCodeImage = await generateQRCodeImage(session.qr_code, {
+      width: width,
+      height: height,
+      margin: 2,
+      errorCorrectionLevel: 'M'
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        qrCodeImage,
+        sessionInfo: {
+          id: session.id,
+          courseName: session.courses.name,
+          sessionDate: session.session_date,
+          authCode: session.auth_code,
+          expiresAt: session.qr_expires_at,
+          isActive: session.is_active
+        }
+      },
+      message: 'QR 코드가 생성되었습니다.',
+      timestamp: new Date().toISOString(),
+    });
+
+  } catch (error) {
+    console.error('QR 코드 생성 오류:', error);
     next(error);
   }
 });
@@ -358,6 +453,19 @@ router.post('/check', authenticateToken, requireStudent, async (req, res, next) 
       });
     }
 
+    // QR 코드 형식 검증
+    const validation = validateQRCode(qrCode);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: validation.error || '잘못된 QR 코드입니다.',
+          statusCode: 400,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     // QR 코드로 세션 찾기
     const { data: session, error: sessionError } = await supabase
       .from('attendance_sessions')
@@ -398,7 +506,7 @@ router.post('/check', authenticateToken, requireStudent, async (req, res, next) 
     }
 
     // QR 코드 만료 시간 확인
-    if (new Date() > new Date(session.qr_expires_at)) {
+    if (isQRCodeExpired(new Date(session.qr_expires_at))) {
       return res.status(410).json({
         success: false,
         error: {
@@ -477,6 +585,8 @@ router.post('/check', authenticateToken, requireStudent, async (req, res, next) 
             radius: session.courses.gps_radius
           }
         },
+        authCode: session.auth_code,
+        authExpiresAt: session.auth_expires_at,
         nextStep: 'gps_verification'
       },
       message: 'QR 코드 스캔이 완료되었습니다. GPS 인증을 진행해주세요.',
