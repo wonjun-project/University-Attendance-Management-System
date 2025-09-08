@@ -35,6 +35,7 @@ import {
   StarOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../store/AuthContext';
+import { useParams } from 'react-router-dom';
 import { apiClient } from '../../services/api';
 import dayjs from 'dayjs';
 import styled from 'styled-components';
@@ -141,6 +142,7 @@ interface CourseStats {
 
 const AttendanceStatisticsPage: React.FC = () => {
   const { user } = useAuth();
+  const { courseId } = useParams<{ courseId: string }>();
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState<any[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>('');
@@ -151,6 +153,12 @@ const AttendanceStatisticsPage: React.FC = () => {
   useEffect(() => {
     loadCourses();
   }, []);
+
+  useEffect(() => {
+    if (courseId) {
+      setSelectedCourse(courseId);
+    }
+  }, [courseId]);
 
   useEffect(() => {
     if (selectedCourse) {

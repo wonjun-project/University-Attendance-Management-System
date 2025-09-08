@@ -5,11 +5,17 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl) {
-  throw new Error('SUPABASE_URL 환경변수가 설정되지 않았습니다.');
+  console.error('❌ SUPABASE_URL 환경변수가 설정되지 않았습니다.');
+  console.error('💡 .env.development 파일에 다음을 추가하세요:');
+  console.error('   SUPABASE_URL=https://your-project-id.supabase.co');
+  process.exit(1);
 }
 
 if (!supabaseServiceKey) {
-  throw new Error('SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.');
+  console.error('❌ SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.');
+  console.error('💡 .env.development 파일에 다음을 추가하세요:');
+  console.error('   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key');
+  process.exit(1);
 }
 
 // Supabase 클라이언트 생성 (서비스 롤 키 사용)

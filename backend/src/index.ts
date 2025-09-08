@@ -4,9 +4,30 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import fs from 'fs';
 
-// 환경변수 로드
-dotenv.config();
+// 환경변수 로드 (개발 환경 고려)
+const nodeEnv = process.env.NODE_ENV || 'development';
+
+// 개발 환경에서 .env.development 파일 먼저 확인
+if (nodeEnv === 'development') {
+  const devEnvPath = path.join(__dirname, '..', '.env.development');
+  const regularEnvPath = path.join(__dirname, '..', '.env');
+  
+  if (fs.existsSync(devEnvPath)) {
+    dotenv.config({ path: devEnvPath });
+    console.log('📝 개발 환경 변수 파일(.env.development)을 로드했습니다.');
+  } else if (fs.existsSync(regularEnvPath)) {
+    dotenv.config({ path: regularEnvPath });
+    console.log('📝 환경 변수 파일(.env)을 로드했습니다.');
+  } else {
+    console.log('⚠️ 환경 변수 파일이 없습니다. 시스템 환경 변수를 사용합니다.');
+    console.log('💡 개발을 위해 .env.development 파일을 생성하세요.');
+  }
+} else {
+  dotenv.config();
+}
 
 // 라우터 임포트
 import authRoutes from './routes/auth';

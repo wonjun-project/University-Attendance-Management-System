@@ -175,25 +175,24 @@ const LocationTestPage: React.FC = () => {
 
       try {
         // 백엔드 위치 테스트 API 호출
-        const response = await apiClient.getStoredUserProfile();
-        if (response) {
-          // 테스트 API 호출 (실제로는 fetch 사용)
-          const testResponse = await fetch(
-            `/api/attendance/test-location?latitude=${latitude}&longitude=${longitude}&accuracy=${accuracy}`,
-            { 
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-              }
+        const baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+        const testResponse = await fetch(
+          `${baseURL}/api/attendance/test-location?latitude=${latitude}&longitude=${longitude}&accuracy=${accuracy}`,
+          { 
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+              'Content-Type': 'application/json'
             }
-          );
-          
-          if (testResponse.ok) {
-            const testData = await testResponse.json();
-            setRecommendation(testData.data.recommendation);
           }
+        );
+        
+        if (testResponse.ok) {
+          const testData = await testResponse.json();
+          setRecommendation(testData.data.recommendation);
         }
       } catch (error) {
         console.error('위치 테스트 API 호출 실패:', error);
+        setRecommendation('위치 테스트 API 호출에 실패했습니다.');
       }
 
       setLoading(false);
