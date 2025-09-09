@@ -1,0 +1,358 @@
+[
+  {
+    "name": "Vercel",
+    "url": "https://vercel.com/dashboard",
+    "colors": [
+      "rgb(255, 255, 255)",
+      "rgb(23, 23, 23)",
+      "rgb(235, 235, 235)",
+      "rgb(0, 114, 245)",
+      "rgb(31, 31, 31)",
+      "rgb(250, 250, 250)",
+      "rgb(0, 0, 0)",
+      "rgba(0, 0, 0, 0.08) rgb(235, 235, 235) rgb(235, 235, 235)",
+      "rgb(136, 136, 136)"
+    ],
+    "typography": {
+      "fonts": [
+        "Geist, Arial, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+      ],
+      "headingCount": 1
+    },
+    "layout": {
+      "hasSidebar": true,
+      "hasHeader": true,
+      "hasMain": true,
+      "sidebarWidth": 1232,
+      "headerHeight": 64
+    },
+    "buttons": [
+      {
+        "borderRadius": "4px",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "6px",
+        "padding": "0px 6px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "fontSize": "14px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "0px 14px",
+        "backgroundColor": "rgb(23, 23, 23)",
+        "fontSize": "16px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "0px 14px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "fontSize": "16px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "0px 14px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "fontSize": "16px",
+        "fontWeight": "500"
+      }
+    ],
+    "timestamp": "2025-09-09T17:05:13.445Z"
+  },
+  {
+    "name": "Linear",
+    "url": "https://linear.app",
+    "error": "page.goto: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://linear.app/\", waiting until \"networkidle\"\u001b[22m\n",
+    "timestamp": "2025-09-09T17:05:30.475Z"
+  },
+  {
+    "name": "Stripe",
+    "url": "https://dashboard.stripe.com",
+    "error": "page.goto: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://dashboard.stripe.com/\", waiting until \"networkidle\"\u001b[22m\n",
+    "timestamp": "2025-09-09T17:05:45.518Z"
+  },
+  {
+    "name": "GitHub",
+    "url": "https://github.com",
+    "colors": [
+      "rgb(13, 17, 23)",
+      "rgb(240, 246, 252)",
+      "rgb(31, 111, 235)",
+      "rgb(255, 255, 255)",
+      "rgb(48, 54, 61)",
+      "rgb(240, 240, 240)",
+      "rgb(0, 0, 0)",
+      "rgb(209, 217, 224)",
+      "rgb(89, 99, 110)",
+      "rgb(31, 35, 40)"
+    ],
+    "typography": {
+      "fonts": [
+        "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+        "\"Mona Sans\", MonaSansFallback, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+        "\"Mona Sans\", \"Mona Sans Fallback\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace"
+      ],
+      "headingCount": 32
+    },
+    "layout": {
+      "hasSidebar": true,
+      "hasHeader": true,
+      "hasMain": true,
+      "sidebarWidth": 602,
+      "headerHeight": 11065
+    },
+    "buttons": [
+      {
+        "borderRadius": "0px",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "14px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "0px",
+        "padding": "1px 6px",
+        "backgroundColor": "rgb(240, 240, 240)",
+        "fontSize": "16px",
+        "fontWeight": "450"
+      },
+      {
+        "borderRadius": "6px",
+        "padding": "4px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "6px",
+        "padding": "4px 12px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "14px",
+        "fontWeight": "450"
+      },
+      {
+        "borderRadius": "6px",
+        "padding": "8px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "450"
+      }
+    ],
+    "timestamp": "2025-09-09T17:05:47.941Z"
+  },
+  {
+    "name": "Supabase",
+    "url": "https://supabase.com/dashboard",
+    "error": "page.goto: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://supabase.com/dashboard\", waiting until \"networkidle\"\u001b[22m\n",
+    "timestamp": "2025-09-09T17:06:05.000Z"
+  },
+  {
+    "name": "Railway",
+    "url": "https://railway.app/dashboard",
+    "colors": [
+      "rgb(255, 255, 255)",
+      "rgb(51, 50, 62)",
+      "rgb(19, 17, 28)",
+      "rgb(24, 13, 67)",
+      "rgb(122, 63, 241)",
+      "rgba(0, 0, 0, 0.45)",
+      "rgba(0, 0, 0, 0.8)",
+      "rgb(33, 31, 45)",
+      "rgb(135, 133, 147)",
+      "rgb(133, 59, 206)"
+    ],
+    "typography": {
+      "fonts": [
+        "Inter, \"Inter Fallback\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen-Sans, Ubuntu, Cantarell, \"Helvetica Neue\", sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+      ],
+      "headingCount": 1
+    },
+    "layout": {
+      "hasSidebar": false,
+      "hasHeader": true,
+      "hasMain": false,
+      "sidebarWidth": 0,
+      "headerHeight": 52
+    },
+    "buttons": [
+      {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "4px",
+        "padding": "8px 12px",
+        "backgroundColor": "rgb(122, 63, 241)",
+        "fontSize": "16px",
+        "fontWeight": "700"
+      },
+      {
+        "borderRadius": "4px",
+        "padding": "8px 12px",
+        "backgroundColor": "rgb(122, 63, 241)",
+        "fontSize": "16px",
+        "fontWeight": "700"
+      },
+      {
+        "borderRadius": "4px",
+        "padding": "8px 12px",
+        "backgroundColor": "rgb(122, 63, 241)",
+        "fontSize": "16px",
+        "fontWeight": "700"
+      },
+      {
+        "borderRadius": "0px",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      }
+    ],
+    "timestamp": "2025-09-09T17:06:09.045Z"
+  },
+  {
+    "name": "Figma",
+    "url": "https://www.figma.com",
+    "colors": [
+      "rgb(0, 0, 0)",
+      "rgb(255, 255, 255)",
+      "rgb(105, 116, 133)",
+      "rgba(0, 0, 0, 0.08)",
+      "rgba(0, 0, 0, 0.08) rgb(0, 0, 0) rgb(0, 0, 0)",
+      "rgb(230, 230, 230)",
+      "rgb(0, 0, 0) rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0.17)",
+      "rgb(77, 73, 252)",
+      "rgb(51, 223, 223)",
+      "rgb(243, 255, 227)"
+    ],
+    "typography": {
+      "fonts": [
+        "__figmaSans_a26a19, __figmaSans_Fallback_a26a19, \"SF Pro Display\", system-ui, helvetica, sans-serif",
+        "__figmaMono_16ac6d, __figmaMono_Fallback_16ac6d, \"SF Mono\", menlo, monospace"
+      ],
+      "headingCount": 25
+    },
+    "layout": {
+      "hasSidebar": true,
+      "hasHeader": true,
+      "hasMain": true,
+      "sidebarWidth": 434,
+      "headerHeight": 81
+    },
+    "buttons": [
+      {
+        "borderRadius": "0px",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "18px",
+        "fontWeight": "330"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "12px 21px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "12px 21px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "0px",
+        "padding": "6px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "0px",
+        "padding": "8px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "18px",
+        "fontWeight": "330"
+      }
+    ],
+    "timestamp": "2025-09-09T17:06:17.155Z"
+  },
+  {
+    "name": "Notion",
+    "url": "https://www.notion.so",
+    "colors": [
+      "rgb(255, 255, 255)",
+      "rgb(25, 25, 24)",
+      "rgb(246, 245, 244)",
+      "rgb(97, 93, 89)",
+      "rgb(49, 48, 46)",
+      "rgb(120, 115, 111)",
+      "rgb(242, 249, 255)",
+      "rgb(0, 91, 171)",
+      "rgba(0, 0, 0, 0.03)",
+      "rgb(0, 117, 222)"
+    ],
+    "typography": {
+      "fonts": [
+        "NotionInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+      ],
+      "headingCount": 53
+    },
+    "layout": {
+      "hasSidebar": true,
+      "hasHeader": true,
+      "hasMain": true,
+      "sidebarWidth": 1280,
+      "headerHeight": 328
+    },
+    "buttons": [
+      {
+        "borderRadius": "4px",
+        "padding": "5px 10px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "4px 14px",
+        "backgroundColor": "rgb(0, 117, 222)",
+        "fontSize": "16px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "4px",
+        "padding": "5px 10px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      },
+      {
+        "borderRadius": "8px",
+        "padding": "4px 14px",
+        "backgroundColor": "rgb(0, 117, 222)",
+        "fontSize": "16px",
+        "fontWeight": "500"
+      },
+      {
+        "borderRadius": "0px",
+        "padding": "11px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "fontSize": "16px",
+        "fontWeight": "400"
+      }
+    ],
+    "timestamp": "2025-09-09T17:06:22.018Z"
+  }
+]

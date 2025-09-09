@@ -8,8 +8,11 @@ import {
   UserOutlined,
   BarChartOutlined,
   QrcodeOutlined,
-  RightOutlined
+  RightOutlined,
+  FireOutlined,
+  TrophyOutlined
 } from '@ant-design/icons';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
 import { apiClient } from '../../services/api';
@@ -21,17 +24,13 @@ const { Title, Text } = Typography;
 const DashboardContainer = styled.div`
   .ant-card {
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    /* Telegram 스타일: 그림자 제거 */
+    border: 1px solid ${({ theme }) => theme.colors.border.light};
   }
 
   .dashboard-card {
-    transition: all 0.3s ease;
+    /* Telegram 스타일: 트랜지션과 애니메이션 제거 */
     cursor: pointer;
-    
-    &:hover {
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-      transform: translateY(-2px);
-    }
   }
 
   .statistic-card {
@@ -39,21 +38,61 @@ const DashboardContainer = styled.div`
     
     .ant-statistic-title {
       font-weight: 500;
-      color: #666;
+      color: ${({ theme }) => theme.colors.text.secondary};
     }
     
     .ant-statistic-content {
-      color: #1890ff;
+      color: ${({ theme }) => theme.colors.primary[500]};
     }
   }
 `;
 
 const WelcomeSection = styled.div`
-  margin-bottom: 32px;
-  padding: 24px;
-  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
-  border-radius: 12px;
-  color: white;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: white;
+  border: 1px solid rgb(235, 235, 235);
+  border-radius: 8px;
+  position: relative;
+  transition: all 0.2s ease;
+  
+  @media (max-width: 768px) {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border-radius: 6px;
+  }
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, rgb(0, 114, 245), rgb(59, 130, 246));
+    border-radius: 8px 8px 0 0;
+    transition: all 0.3s ease;
+    
+    @media (max-width: 768px) {
+      border-radius: 6px 6px 0 0;
+    }
+  }
+
+  &:hover {
+    border-color: rgb(0, 114, 245);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 114, 245, 0.08);
+    
+    @media (max-width: 768px) {
+      transform: none;
+      box-shadow: none;
+    }
+    
+    &::before {
+      height: 4px;
+      background: linear-gradient(90deg, rgb(0, 114, 245), rgb(99, 179, 237));
+    }
+  }
 `;
 
 const QuickActionGrid = styled.div`
@@ -65,28 +104,239 @@ const QuickActionGrid = styled.div`
 
 const QuickActionCard = styled(Card)`
   text-align: center;
-  border: 2px solid transparent;
-  transition: all 0.3s ease;
+  background: white;
+  border: 1px solid rgb(235, 235, 235);
+  border-radius: 8px;
   cursor: pointer;
+  height: clamp(100px, 15vw, 120px);
+  transition: all 0.15s ease;
+
+  @media (max-width: 768px) {
+    border-radius: 6px;
+    min-height: 90px;
+  }
 
   &:hover {
-    border-color: #1890ff;
-    box-shadow: 0 4px 16px rgba(24, 144, 255, 0.2);
+    border-color: rgb(0, 114, 245);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    
+    @media (max-width: 768px) {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
   }
 
   .ant-card-body {
-    padding: 24px 16px;
+    padding: clamp(12px, 3vw, 20px) clamp(8px, 2vw, 16px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
   }
 
   .action-icon {
-    font-size: 32px;
-    color: #1890ff;
-    margin-bottom: 12px;
+    font-size: clamp(20px, 5vw, 24px);
+    color: rgb(0, 114, 245);
+    margin-bottom: clamp(8px, 2vw, 12px);
   }
 
   .action-title {
-    font-weight: 600;
-    margin-bottom: 8px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    font-size: clamp(12px, 3vw, 14px);
+    color: rgb(23, 23, 23);
+    font-family: 'Geist, Arial, sans-serif';
+    line-height: 1.2;
+  }
+`;
+
+// 출석 통계 차트 컨테이너
+const StatsSection = styled.div`
+  margin: clamp(20px, 5vw, 32px) 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(16px, 4vw, 20px);
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  @media (max-width: 480px) {
+    margin: 12px 0;
+    gap: 8px;
+  }
+`;
+
+const StatCard = styled.div`
+  background: white;
+  border: 1px solid rgb(235, 235, 235);
+  border-radius: clamp(6px, 2vw, 8px);
+  padding: clamp(16px, 4vw, 20px);
+  min-height: clamp(160px, 25vw, 200px);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    min-height: 180px;
+    padding: 14px;
+  }
+
+  @media (max-width: 480px) {
+    min-height: 160px;
+    padding: 12px;
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, rgb(0, 114, 245), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  &:hover {
+    border-color: rgb(0, 114, 245);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 114, 245, 0.1);
+    
+    @media (max-width: 768px) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(0, 114, 245, 0.08);
+    }
+    
+    &::before {
+      opacity: 1;
+    }
+  }
+`;
+
+// 출석 스트릭 위젯
+const StreakWidget = styled.div`
+  .streak-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: clamp(12px, 3vw, 20px);
+    
+    h3 {
+      margin: 0;
+      color: rgb(23, 23, 23);
+      font-family: 'Geist, Arial, sans-serif';
+      font-size: clamp(14px, 3.5vw, 16px);
+      font-weight: 600;
+    }
+  }
+
+  .streak-display {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 3vw, 16px);
+    flex-wrap: wrap;
+    
+    .streak-number {
+      font-size: clamp(28px, 7vw, 36px);
+      font-weight: 700;
+      color: rgb(255, 125, 25);
+      font-family: 'ui-monospace, SFMono-Regular, monospace';
+    }
+    
+    .streak-icon {
+      font-size: clamp(22px, 5.5vw, 28px);
+      color: rgb(255, 125, 25);
+    }
+    
+    .streak-label {
+      color: rgb(136, 136, 136);
+      font-size: clamp(12px, 3vw, 14px);
+      font-weight: 500;
+      font-family: 'Geist, Arial, sans-serif';
+    }
+  }
+
+  .streak-dots {
+    display: flex;
+    gap: 4px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: rgb(250, 250, 250);
+      border: 1px solid rgb(235, 235, 235);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      position: relative;
+      
+      &:hover {
+        transform: scale(1.3);
+        z-index: 1;
+      }
+      
+      &.attended {
+        background: rgb(34, 197, 94);
+        border-color: rgb(34, 197, 94);
+        
+        &:hover {
+          box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+        }
+      }
+      
+      &.late {
+        background: rgb(245, 166, 35);
+        border-color: rgb(245, 166, 35);
+        
+        &:hover {
+          box-shadow: 0 0 12px rgba(245, 166, 35, 0.4);
+        }
+      }
+      
+      &.absent {
+        background: rgb(239, 68, 68);
+        border-color: rgb(239, 68, 68);
+        
+        &:hover {
+          box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+        }
+      }
+    }
+  }
+`;
+
+// 주간 차트 위젯
+const ChartWidget = styled.div`
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: clamp(12px, 3vw, 20px);
+    
+    h3 {
+      margin: 0;
+      color: rgb(23, 23, 23);
+      font-family: 'Geist, Arial, sans-serif';
+      font-size: clamp(14px, 3.5vw, 16px);
+      font-weight: 600;
+    }
+  }
+
+  .chart-container {
+    height: clamp(100px, 15vw, 120px);
+    margin-top: clamp(12px, 3vw, 16px);
+    
+    @media (max-width: 480px) {
+      height: 80px;
+    }
   }
 `;
 
@@ -110,6 +360,7 @@ const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [courses, setCourses] = useState<Course[]>([]);
   const [stats, setStats] = useState({
     totalCourses: 0,
@@ -118,6 +369,39 @@ const DashboardPage: React.FC = () => {
     todaySessions: 0,
   });
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  
+  // 출석 스트릭 데이터 (최근 14일)
+  const [streakData] = useState({
+    currentStreak: 7,
+    longestStreak: 12,
+    attendancePattern: [
+      { status: 'attended' }, { status: 'attended' }, { status: 'late' }, 
+      { status: 'attended' }, { status: 'attended' }, { status: 'absent' }, 
+      { status: 'attended' }, { status: 'attended' }, { status: 'attended' }, 
+      { status: 'attended' }, { status: 'attended' }, { status: 'attended' }, 
+      { status: 'attended' }, { status: 'attended' }
+    ]
+  });
+
+  // 주간 출석 차트 데이터
+  const [weeklyData] = useState([
+    { day: '월', attendance: 95 },
+    { day: '화', attendance: 88 },
+    { day: '수', attendance: 92 },
+    { day: '목', attendance: 85 },
+    { day: '금', attendance: 97 },
+    { day: '토', attendance: 0 },
+    { day: '일', attendance: 0 },
+  ]);
+
+  // 실시간 시간 업데이트
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
 
   // 데이터 로드
   const loadDashboardData = useCallback(async () => {
@@ -241,177 +525,286 @@ const DashboardPage: React.FC = () => {
 
   return (
     <DashboardContainer>
-      {/* 환영 섹션 */}
+      {/* Vercel 스타일 헤더 위젯 */}
       <WelcomeSection>
-        <Row align="middle" justify="space-between">
-          <Col>
-            <Title level={2} style={{ color: 'white', marginBottom: 8 }}>
-              안녕하세요, {user?.name}님! 👋
-            </Title>
-            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '16px' }}>
-              {user?.role === 'professor' ? '오늘도 강의 준비 화이팅!' : '오늘도 출석 체크 화이팅!'}
-            </Text>
+        <Row align="middle" justify="space-between" style={{ flexWrap: 'wrap', gap: '12px 0' }}>
+          <Col xs={24} sm={12} md={14} lg={16}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <Title level={2} style={{ 
+                  color: 'rgb(23, 23, 23)', 
+                  marginBottom: 4, 
+                  fontFamily: 'Geist, Arial, sans-serif', 
+                  fontWeight: 600,
+                  fontSize: 'clamp(20px, 4vw, 24px)'
+                }}>
+                  대시보드
+                </Title>
+                <div style={{ 
+                  fontSize: 'clamp(12px, 2.5vw, 14px)', 
+                  color: 'rgb(136, 136, 136)', 
+                  fontFamily: 'Geist, Arial, sans-serif'
+                }}>
+                  {currentTime.toLocaleDateString('ko-KR', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </div>
+              </div>
+              
+              {/* 실시간 시간 위젯 - 모바일에서는 작게 */}
+              <div style={{
+                background: 'rgb(250, 250, 250)',
+                padding: 'clamp(8px, 2vw, 12px) clamp(12px, 3vw, 16px)',
+                borderRadius: '6px',
+                border: '1px solid rgb(235, 235, 235)',
+                fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => {
+                if (window.innerWidth > 768) {
+                  e.currentTarget.style.background = 'rgb(245, 245, 245)';
+                  e.currentTarget.style.borderColor = 'rgb(0, 114, 245)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 114, 245, 0.1)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (window.innerWidth > 768) {
+                  e.currentTarget.style.background = 'rgb(250, 250, 250)';
+                  e.currentTarget.style.borderColor = 'rgb(235, 235, 235)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }
+              }}
+              >
+                <div style={{ 
+                  fontSize: 'clamp(16px, 4vw, 20px)', 
+                  fontWeight: '600', 
+                  color: 'rgb(23, 23, 23)',
+                  lineHeight: 1
+                }}>
+                  {currentTime.toLocaleTimeString('ko-KR', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                  })}
+                </div>
+              </div>
+            </div>
           </Col>
-          <Col>
-            <Space>
-              <Tag color="white" style={{ color: '#1890ff', fontWeight: 500 }}>
-                {user?.role === 'professor' ? '교수' : '학생'}
-              </Tag>
-              {user?.studentId && (
-                <Tag color="white" style={{ color: '#722ed1', fontWeight: 500 }}>
-                  {user.studentId}
+          
+          <Col xs={24} sm={12} md={10} lg={8} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              {/* 오늘의 출석 현황 */}
+              <div style={{ 
+                background: 'rgb(250, 250, 250)', 
+                padding: 'clamp(6px, 1.5vw, 8px) clamp(10px, 2.5vw, 12px)', 
+                borderRadius: '6px',
+                border: '1px solid rgb(235, 235, 235)',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                if (window.innerWidth > 768) {
+                  e.currentTarget.style.background = 'rgb(245, 245, 245)';
+                  e.currentTarget.style.borderColor = 'rgb(34, 197, 94)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.1)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (window.innerWidth > 768) {
+                  e.currentTarget.style.background = 'rgb(250, 250, 250)';
+                  e.currentTarget.style.borderColor = 'rgb(235, 235, 235)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }
+              }}
+              >
+                <Space size="small" style={{ width: '100%', justifyContent: 'center' }}>
+                  <span style={{ color: 'rgb(0, 114, 245)', fontSize: 'clamp(10px, 2.5vw, 12px)', fontWeight: '500' }}>
+                    출석: 3
+                  </span>
+                  <span style={{ color: 'rgb(245, 166, 35)', fontSize: 'clamp(10px, 2.5vw, 12px)', fontWeight: '500' }}>
+                    지각: 1
+                  </span>
+                  <span style={{ color: 'rgb(245, 101, 101)', fontSize: 'clamp(10px, 2.5vw, 12px)', fontWeight: '500' }}>
+                    결석: 0
+                  </span>
+                </Space>
+              </div>
+              
+              <Space style={{ width: '100%', justifyContent: 'center' }}>
+                <Tag style={{ 
+                  background: 'white', 
+                  color: 'rgb(0, 114, 245)', 
+                  border: '1px solid rgb(235, 235, 235)',
+                  fontWeight: 500,
+                  borderRadius: '4px',
+                  fontSize: 'clamp(10px, 2.5vw, 12px)'
+                }}>
+                  {user?.role === 'professor' ? '교수' : '학생'}
                 </Tag>
-              )}
+                {user?.studentId && (
+                  <Tag style={{ 
+                    background: 'white', 
+                    color: 'rgb(136, 136, 136)', 
+                    border: '1px solid rgb(235, 235, 235)',
+                    fontWeight: 500,
+                    borderRadius: '4px',
+                    fontSize: 'clamp(10px, 2.5vw, 12px)'
+                  }}>
+                    {user.studentId}
+                  </Tag>
+                )}
+              </Space>
             </Space>
           </Col>
         </Row>
       </WelcomeSection>
 
-      {/* 통계 카드 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="statistic-card">
-            <Statistic
-              title={user?.role === 'professor' ? '담당 강의' : '수강 강의'}
-              value={stats.totalCourses}
-              suffix="개"
-              prefix={<BookOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="statistic-card">
-            <Statistic
-              title="총 세션 수"
-              value={stats.totalSessions}
-              suffix="회"
-              prefix={<CalendarOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="statistic-card">
-            <Statistic
-              title="출석률"
-              value={stats.attendanceRate}
-              suffix="%"
-              prefix={<CheckCircleOutlined />}
-              precision={1}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="statistic-card">
-            <Statistic
-              title="오늘 일정"
-              value={stats.todaySessions}
-              suffix="개"
-              prefix={<ClockCircleOutlined />}
-            />
-          </Card>
-        </Col>
-      </Row>
-
       {/* 빠른 액션 */}
-      <div style={{ marginBottom: 32 }}>
-        <Title level={4} style={{ marginBottom: 16 }}>
-          빠른 액션
-        </Title>
-        <QuickActionGrid>
+      <div>
+        <Row gutter={[8, 8]} style={{ marginBottom: 'clamp(16px, 4vw, 32px)' }}>
           {getQuickActions().map((action) => (
-            <QuickActionCard key={action.key} onClick={action.onClick}>
-              <div className="action-icon">{action.icon}</div>
-              <div className="action-title">{action.title}</div>
-              <Text type="secondary">{action.description}</Text>
-            </QuickActionCard>
+            <Col xs={12} sm={6} md={6} lg={6} key={action.key}>
+              <QuickActionCard onClick={action.onClick}>
+                <div className="action-icon">{action.icon}</div>
+                <div className="action-title">{action.title}</div>
+                <Text 
+                  type="secondary" 
+                  style={{ 
+                    fontSize: 'clamp(10px, 2.5vw, 12px)', 
+                    textAlign: 'center',
+                    display: 'block',
+                    lineHeight: 1.2
+                  }}
+                >
+                  {action.description}
+                </Text>
+              </QuickActionCard>
+            </Col>
           ))}
-        </QuickActionGrid>
+        </Row>
       </div>
 
-      <Row gutter={[16, 16]}>
-        {/* 강의 목록 */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={user?.role === 'professor' ? '담당 강의' : '수강 강의'}
-            extra={
-              <Button 
-                type="text" 
-                icon={<RightOutlined />}
-                onClick={() => navigate(user?.role === 'professor' ? '/courses' : '/my-courses')}
-              >
-                전체 보기
-              </Button>
-            }
-          >
-            {courses.length > 0 ? (
-              <List
-                dataSource={courses}
-                renderItem={(course) => (
-                  <List.Item
-                    key={course.id}
-                    onClick={() => navigate(`/courses/${course.id}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <List.Item.Meta
-                      avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}
-                      title={
-                        <Space>
-                          <Text strong>{course.name}</Text>
-                          <Tag color="blue">{course.course_code}</Tag>
-                        </Space>
-                      }
-                      description={
-                        <Text type="secondary">
-                          {course.room && `${course.room} | `}
-                          {course.professorName && user?.role === 'student' && course.professorName}
-                        </Text>
-                      }
-                    />
-                  </List.Item>
-                )}
-              />
-            ) : (
-              <Empty description="강의가 없습니다" />
-            )}
-          </Card>
-        </Col>
+      {/* 출석 통계 섹션 */}
+      <StatsSection>
+        {/* 출석 스트릭 */}
+        <StatCard>
+          <StreakWidget>
+            <div className="streak-header">
+              <h3>출석 스트릭</h3>
+              <TrophyOutlined style={{ color: 'rgb(245, 166, 35)' }} />
+            </div>
+            
+            <div className="streak-display">
+              <FireOutlined className="streak-icon" />
+              <div>
+                <div className="streak-number">{streakData.currentStreak}</div>
+                <div className="streak-label">연속 출석</div>
+              </div>
+            </div>
 
-        {/* 최근 활동 */}
-        <Col xs={24} lg={12}>
-          <Card title="최근 활동">
-            {recentActivities.length > 0 ? (
-              <List
-                dataSource={recentActivities}
-                renderItem={(activity) => (
-                  <List.Item key={activity.id}>
-                    <List.Item.Meta
-                      avatar={
-                        <Avatar 
-                          icon={activity.type === 'attendance' ? <CheckCircleOutlined /> : <CalendarOutlined />}
-                          style={{ 
-                            backgroundColor: activity.type === 'attendance' ? '#52c41a' : '#1890ff' 
-                          }} 
-                        />
+            <div className="streak-dots">
+              {streakData.attendancePattern.map((day, index) => (
+                <div
+                  key={index}
+                  className={`dot ${day.status}`}
+                  title={`${14 - index}일 전: ${
+                    day.status === 'attended' ? '출석' : 
+                    day.status === 'late' ? '지각' : '결석'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div style={{ 
+              marginTop: 'clamp(12px, 3vw, 16px)', 
+              fontSize: 'clamp(10px, 2.5vw, 12px)', 
+              color: 'rgb(136, 136, 136)',
+              fontFamily: 'Geist, Arial, sans-serif'
+            }}>
+              최장 기록: {streakData.longestStreak}일
+            </div>
+          </StreakWidget>
+        </StatCard>
+
+        {/* 주간 출석 차트 */}
+        <StatCard>
+          <ChartWidget>
+            <div className="chart-header">
+              <h3>주간 출석률</h3>
+              <BarChartOutlined style={{ color: 'rgb(0, 114, 245)' }} />
+            </div>
+            
+            <div style={{ 
+              fontSize: 'clamp(20px, 5vw, 24px)', 
+              fontWeight: '600', 
+              color: 'rgb(0, 114, 245)',
+              fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+              marginBottom: 'clamp(6px, 1.5vw, 8px)'
+            }}>
+              {Math.round(weeklyData.reduce((acc, day) => acc + day.attendance, 0) / 5)}%
+            </div>
+            <div style={{ 
+              fontSize: 'clamp(10px, 2.5vw, 12px)', 
+              color: 'rgb(136, 136, 136)',
+              marginBottom: 'clamp(12px, 3vw, 16px)',
+              fontFamily: 'Geist, Arial, sans-serif'
+            }}>
+              이번 주 평균
+            </div>
+
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weeklyData}>
+                  <XAxis 
+                    dataKey="day" 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: 'rgb(136, 136, 136)' }}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div style={{
+                            background: 'white',
+                            border: '1px solid rgb(235, 235, 235)',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            fontSize: '12px',
+                            fontFamily: 'Geist, Arial, sans-serif'
+                          }}>
+                            {`${label}: ${payload[0].value}%`}
+                          </div>
+                        );
                       }
-                      title={activity.title}
-                      description={
-                        <Space direction="vertical" size={4}>
-                          <Text type="secondary">{activity.description}</Text>
-                          <Text type="secondary" style={{ fontSize: '12px' }}>
-                            {activity.timestamp}
-                          </Text>
-                        </Space>
-                      }
-                    />
-                  </List.Item>
-                )}
-              />
-            ) : (
-              <Empty description="최근 활동이 없습니다" />
-            )}
-          </Card>
-        </Col>
-      </Row>
+                      return null;
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="attendance" 
+                    stroke="rgb(0, 114, 245)" 
+                    strokeWidth={2}
+                    dot={{ fill: 'rgb(0, 114, 245)', strokeWidth: 2, r: 3 }}
+                    activeDot={{ r: 5, stroke: 'rgb(0, 114, 245)', strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartWidget>
+        </StatCard>
+      </StatsSection>
+
     </DashboardContainer>
   );
 };
