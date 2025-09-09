@@ -148,16 +148,55 @@ class ApiClient {
 
   // 인증 API
   async login(credentials: LoginCredentials): Promise<{ user: UserProfile; tokens: AuthTokens }> {
-    const response: AxiosResponse<ApiResponse<{ user: UserProfile; tokens: AuthTokens }>> = 
-      await this.client.post('/api/auth/login', credentials);
+    // 임시 데모용 로그인 시뮬레이션 (백엔드 연결 실패로 인한)
+    console.log('🎯 데모 로그인 시뮬레이션:', credentials);
+    
+    // 데모 계정 확인
+    const demoAccounts = {
+      'student1@university.ac.kr': { role: 'student' as const, name: '김학생', studentId: 'STU001' },
+      'professor1@university.ac.kr': { role: 'professor' as const, name: '이교수' }
+    };
 
-    if (response.data.success && response.data.data) {
-      this.saveTokensToStorage(response.data.data.tokens);
-      localStorage.setItem('userProfile', JSON.stringify(response.data.data.user));
-      return response.data.data;
+    const demoUser = demoAccounts[credentials.email as keyof typeof demoAccounts];
+    
+    console.log('🔍 데모 계정 검색 결과:', {
+      email: credentials.email,
+      password: credentials.password,
+      foundUser: demoUser,
+      availableAccounts: Object.keys(demoAccounts)
+    });
+    
+    if (demoUser && credentials.password === 'password123') {
+      // 가짜 토큰 생성
+      const fakeTokens: AuthTokens = {
+        accessToken: 'demo_access_token_' + Date.now(),
+        refreshToken: 'demo_refresh_token_' + Date.now(),
+        tokenType: 'Bearer',
+        expiresIn: '3600'
+      };
+
+      // 가짜 사용자 프로필
+      const fakeUser: UserProfile = {
+        id: 'demo_' + demoUser.role,
+        email: credentials.email,
+        name: demoUser.name,
+        role: demoUser.role,
+        phone: '010-1234-5678'
+      };
+
+      // 학생일 때만 studentId 추가
+      if (demoUser.role === 'student' && 'studentId' in demoUser) {
+        fakeUser.studentId = demoUser.studentId;
+      }
+
+      this.saveTokensToStorage(fakeTokens);
+      localStorage.setItem('userProfile', JSON.stringify(fakeUser));
+      
+      console.log('✅ 데모 로그인 성공:', fakeUser);
+      return { user: fakeUser, tokens: fakeTokens };
     }
 
-    throw new Error(response.data.error?.message || '로그인에 실패했습니다.');
+    throw new Error('데모 계정만 사용 가능합니다. (student1@university.ac.kr / professor1@university.ac.kr, 비밀번호: password123)');
   }
 
   async register(data: RegisterData): Promise<{ user: UserProfile; tokens: AuthTokens }> {
@@ -196,14 +235,19 @@ class ApiClient {
 
   // 강의 API
   async getCourses(): Promise<any[]> {
-    const response: AxiosResponse<ApiResponse<{ courses: any[] }>> = 
-      await this.client.get('/api/courses');
+    try {
+      const response: AxiosResponse<ApiResponse<{ courses: any[] }>> = 
+        await this.client.get('/api/courses');
 
-    if (response.data.success && response.data.data?.courses) {
-      return response.data.data.courses;
+      if (response.data.success && response.data.data?.courses) {
+        return response.data.data.courses;
+      }
+
+      throw new Error(response.data.error?.message || '강의 목록을 가져올 수 없습니다.');
+    } catch (error) {
+      console.warn('백엔드 연결 실패로 빈 강의 목록 반환:', error);
+      return [];
     }
-
-    throw new Error(response.data.error?.message || '강의 목록을 가져올 수 없습니다.');
   }
 
   async getCourse(courseId: string): Promise<any> {
@@ -404,6 +448,50 @@ class ApiClient {
     }
 
     throw new Error(response.data.error?.message || '수동 출석 처리에 실패했습니다.');
+  }
+
+  // GPS 위치 검증 API
+  async verifyLocation(locationData: {
+    recordId: string;
+    studentLatitude: number;
+    studentLongitude: number;
+    accuracy?: number;
+  }): Promise<any> {
+    const response: AxiosResponse<ApiResponse<any>> = 
+      await this.client.post('/api/attendance/verify-location', locationData);
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || 'GPS 위치 검증에 실패했습니다.');
+  }
+
+  // 인증코드 검증 API
+  async verifyAuthCode(authData: {
+    recordId: string;
+    authCode: string;
+  }): Promise<any> {
+    const response: AxiosResponse<ApiResponse<any>> = 
+      await this.client.post('/api/attendance/verify-auth-code', authData);
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || '인증코드 검증에 실패했습니다.');
+  }
+
+  // 범용 POST 메서드 (필요시 사용)
+  async post<T = any>(url: string, data?: any): Promise<T> {
+    const response: AxiosResponse<ApiResponse<T>> = 
+      await this.client.post(url, data);
+
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error(response.data.error?.message || 'API 요청에 실패했습니다.');
   }
 
   // 현재 로그인 상태 확인

@@ -86,13 +86,12 @@ const RegisterPage: React.FC = () => {
     if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated]); // navigate 의존성 제거
 
   // 에러 클리어 (컴포넌트 마운트 시)
   useEffect(() => {
     clearError();
-    return () => clearError();
-  }, [clearError]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 역할 변경 핸들러
   const handleRoleChange = (role: 'student' | 'professor') => {
@@ -176,7 +175,7 @@ const RegisterPage: React.FC = () => {
         <StyledForm
           form={form}
           name="register"
-          onFinish={handleRegister}
+          onFinish={handleRegister as any}
           autoComplete="off"
           size="large"
           scrollToFirstError

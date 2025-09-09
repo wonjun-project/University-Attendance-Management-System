@@ -34,13 +34,15 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
+  // 무한 루프 방지: 로딩 상태에서는 스피너만 표시
   if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  if (!isAuthenticated) {
+  // 무한 루프 방지: 인증되지 않은 사용자만 리디렉션
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -53,13 +55,15 @@ interface PublicOnlyRouteProps {
 }
 
 const PublicOnlyRoute: React.FC<PublicOnlyRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
+  // 무한 루프 방지: 로딩 상태에서는 스피너만 표시
   if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  if (isAuthenticated) {
+  // 무한 루프 방지: 완전히 인증된 사용자만 리디렉션
+  if (isAuthenticated && user) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -78,15 +82,18 @@ const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
 }) => {
   const { user, isAuthenticated, isLoading } = useAuth();
 
+  // 무한 루프 방지: 로딩 상태에서는 스피너만 표시
   if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  if (!isAuthenticated) {
+  // 무한 루프 방지: 인증되지 않은 사용자 체크
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!user || !allowedRoles.includes(user.role)) {
+  // 무한 루프 방지: 권한이 없는 사용자만 리디렉션
+  if (!allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -102,29 +109,19 @@ const PlaceholderPage: React.FC<{ title: string; description: string }> = ({ tit
   </div>
 );
 
-// 메인 라우터 컴포넌트
+// 메인 라우터 컴포넌트 - 임시로 단순화
 const AppRouter: React.FC = () => {
   return (
     <Routes>
-      {/* 공용 라우트 (인증 불필요) */}
+      {/* 단계적 테스트: 실제 LoginPage 활성화 */}
       <Route 
         path="/login" 
         element={
           <PublicOnlyRoute>
             <LoginPage />
           </PublicOnlyRoute>
-        } 
+        }
       />
-      <Route 
-        path="/register" 
-        element={
-          <PublicOnlyRoute>
-            <RegisterPage />
-          </PublicOnlyRoute>
-        } 
-      />
-
-      {/* 인증이 필요한 공통 라우트 */}
       <Route 
         path="/dashboard" 
         element={
@@ -133,74 +130,8 @@ const AppRouter: React.FC = () => {
           </ProtectedRoute>
         } 
       />
-      <Route 
-        path="/profile" 
-        element={
-          <ProtectedRoute>
-            <PlaceholderPage title="프로필" description="사용자 프로필 관리 페이지입니다." />
-          </ProtectedRoute>
-        } 
-      />
 
-      {/* 교수 전용 라우트 */}
-      <Route 
-        path="/courses" 
-        element={
-          <RoleProtectedRoute allowedRoles={['professor']}>
-            <CoursesManagePage />
-          </RoleProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/courses/:courseId" 
-        element={
-          <ProtectedRoute>
-            <PlaceholderPage title="강의 상세" description="강의 상세 정보 페이지입니다." />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/courses/:courseId/stats" 
-        element={
-          <RoleProtectedRoute allowedRoles={['professor']}>
-            <AttendanceStatisticsPage />
-          </RoleProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/attendance/sessions" 
-        element={
-          <RoleProtectedRoute allowedRoles={['professor']}>
-            <AttendanceSessionsPage />
-          </RoleProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/qr-generator" 
-        element={
-          <RoleProtectedRoute allowedRoles={['professor']}>
-            <QRGeneratorPage />
-          </RoleProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/statistics" 
-        element={
-          <RoleProtectedRoute allowedRoles={['professor']}>
-            <AttendanceStatisticsPage />
-          </RoleProtectedRoute>
-        } 
-      />
-
-      {/* 학생 전용 라우트 */}
-      <Route 
-        path="/my-courses" 
-        element={
-          <RoleProtectedRoute allowedRoles={['student']}>
-            <MyCoursesPage />
-          </RoleProtectedRoute>
-        } 
-      />
+      {/* 학생용 라우트 */}
       <Route 
         path="/attendance/scan" 
         element={
@@ -218,6 +149,14 @@ const AppRouter: React.FC = () => {
         } 
       />
       <Route 
+        path="/my-courses" 
+        element={
+          <RoleProtectedRoute allowedRoles={['student']}>
+            <MyCoursesPage />
+          </RoleProtectedRoute>
+        } 
+      />
+      <Route 
         path="/location-test" 
         element={
           <RoleProtectedRoute allowedRoles={['student']}>
@@ -225,48 +164,59 @@ const AppRouter: React.FC = () => {
           </RoleProtectedRoute>
         } 
       />
+
+      {/* 교수용 라우트 */}
       <Route 
-        path="/attendance/gps-verify/:recordId" 
+        path="/qr-generator" 
         element={
-          <RoleProtectedRoute allowedRoles={['student']}>
-            <GPSVerificationPage />
+          <RoleProtectedRoute allowedRoles={['professor']}>
+            <QRGeneratorPage />
+          </RoleProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/attendance/sessions" 
+        element={
+          <RoleProtectedRoute allowedRoles={['professor']}>
+            <AttendanceSessionsPage />
+          </RoleProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/statistics" 
+        element={
+          <RoleProtectedRoute allowedRoles={['professor']}>
+            <AttendanceStatisticsPage />
+          </RoleProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/courses" 
+        element={
+          <RoleProtectedRoute allowedRoles={['professor']}>
+            <CoursesManagePage />
           </RoleProtectedRoute>
         } 
       />
 
-      {/* 404 및 기본 라우트 */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* 회원가입 라우트 */}
+      <Route 
+        path="/register" 
+        element={
+          <PublicOnlyRoute>
+            <RegisterPage />
+          </PublicOnlyRoute>
+        } 
+      />
+      
+      {/* 기본 라우트 */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route 
         path="*" 
         element={
-          <div style={{ 
-            textAlign: 'center', 
-            padding: '100px 20px',
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}>
-            <h1 style={{ fontSize: '48px', marginBottom: '16px' }}>404</h1>
-            <h2 style={{ marginBottom: '16px' }}>페이지를 찾을 수 없습니다</h2>
-            <p style={{ color: '#666', marginBottom: '32px' }}>
-              요청하신 페이지가 존재하지 않거나 이동되었을 수 있습니다.
-            </p>
-            <button 
-              onClick={() => window.location.href = '/dashboard'}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: '#1890ff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-            >
-              대시보드로 돌아가기
-            </button>
+          <div style={{ padding: '50px', textAlign: 'center' }}>
+            <h1>❌ 404 - 페이지를 찾을 수 없습니다</h1>
+            <p>무한 루프 테스트 중...</p>
           </div>
         } 
       />

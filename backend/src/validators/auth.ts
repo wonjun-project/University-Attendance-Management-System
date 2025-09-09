@@ -47,47 +47,57 @@ export const registerSchema = z.object({
     }),
   studentId: z
     .string()
-    .optional()
-    .refine((val, ctx) => {
-      const role = ctx.parent?.role;
-      // 학생인 경우 학번이 필수
-      if (role === 'student') {
-        if (!val) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: '학생은 학번을 입력해주세요.',
-          });
-          return false;
-        }
-        // 학번 형식 검증 (예: 2024001)
-        if (!/^\d{7}$/.test(val)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: '학번은 7자리 숫자여야 합니다.',
-          });
-          return false;
-        }
-      }
-      // 교수인 경우 학번이 있으면 안됨
-      if (role === 'professor' && val) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: '교수는 학번을 입력할 수 없습니다.',
-        });
-        return false;
-      }
-      return true;
-    }),
+    .optional(),
   phone: z
     .string()
     .optional()
-    .refine((val) => {
-      if (!val) return true; // 선택사항이므로 빈 값은 허용
-      return /^010-\d{4}-\d{4}$/.test(val);
-    }, '휴대폰 번호는 010-0000-0000 형식으로 입력해주세요.')
-}).refine((data) => data.password === data.confirmPassword, {
-  message: '비밀번호가 일치하지 않습니다.',
-  path: ['confirmPassword'],
+    .nullable()
+}).superRefine((data, ctx) => {
+  // 비밀번호 확인 검증
+  if (data.password !== data.confirmPassword) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: '비밀번호가 일치하지 않습니다.',
+      path: ['confirmPassword'],
+    });
+  }
+  
+  // 휴대폰 번호 형식 검증
+  if (data.phone && data.phone.trim() !== '') {
+    if (!/^010-\d{4}-\d{4}$/.test(data.phone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '휴대폰 번호는 010-0000-0000 형식으로 입력해주세요.',
+        path: ['phone'],
+      });
+    }
+  }
+  
+  // 학생인 경우 학번 필수 검증
+  if (data.role === 'student') {
+    if (!data.studentId || data.studentId.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '학생은 학번을 입력해주세요.',
+        path: ['studentId'],
+      });
+    } else if (!/^\d{7}$/.test(data.studentId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '학번은 7자리 숫자여야 합니다.',
+        path: ['studentId'],
+      });
+    }
+  }
+  
+  // 교수인 경우 학번이 있으면 안됨
+  if (data.role === 'professor' && data.studentId && data.studentId.trim() !== '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: '교수는 학번을 입력할 수 없습니다.',
+      path: ['studentId'],
+    });
+  }
 });
 
 // 비밀번호 재설정 요청 스키마

@@ -54,8 +54,35 @@ const limiter = rateLimit({
 
 // 기본 미들웨어
 app.use(helmet());
+
+// 개발 환경에서는 여러 포트와 IP 주소 허용, 프로덕션에서는 특정 URL만 허용
+const corsOrigin = nodeEnv === 'development' 
+  ? [
+      'http://localhost:3000',
+      'http://localhost:3001', 
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:3004',
+      'http://localhost:3005',
+      'http://localhost:3006',
+      'http://localhost:3007',
+      'http://localhost:3008',
+      'http://localhost:3009',
+      'http://192.168.0.111:3000',
+      'http://192.168.0.111:3001',
+      'http://192.168.0.111:3002',
+      'http://192.168.0.111:3003',
+      'http://192.168.0.111:3004',
+      'http://192.168.0.111:3005',
+      'http://192.168.0.111:3006',
+      'http://192.168.0.111:3007',
+      'http://192.168.0.111:3008',
+      'http://192.168.0.111:3009'
+    ]
+  : process.env.FRONTEND_URL || 'http://localhost:3000';
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: corsOrigin,
   credentials: true,
 }));
 app.use(morgan('combined'));

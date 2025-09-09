@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Row, Col, Statistic, Typography, Space, Button, List, Avatar, Tag, Progress, Empty, Spin } from 'antd';
 import { 
   BookOutlined, 
@@ -120,11 +120,7 @@ const DashboardPage: React.FC = () => {
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
 
   // 데이터 로드
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -162,7 +158,11 @@ const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // user.role은 고정값이므로 의존성에서 제거
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 빠른 액션 정의
   const getQuickActions = () => {

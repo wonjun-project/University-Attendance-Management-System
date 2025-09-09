@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Row,
@@ -33,7 +33,7 @@ import { useAuth } from '../../store/AuthContext';
 import { apiClient } from '../../services/api';
 import styled from 'styled-components';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 const CoursesContainer = styled.div`
   .course-card {
@@ -140,11 +140,7 @@ const MyCoursesPage: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [totalStats, setTotalStats] = useState<any>(null);
 
-  useEffect(() => {
-    loadMyCoursesData();
-  }, []);
-
-  const loadMyCoursesData = async () => {
+  const loadMyCoursesData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -176,7 +172,11 @@ const MyCoursesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadMyCoursesData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 출석률에 따른 상태 및 색상 반환
   const getAttendanceStatus = (rate: number) => {
@@ -338,9 +338,14 @@ const MyCoursesPage: React.FC = () => {
                         </div>
 
                         {course.description && (
-                          <Paragraph type="secondary" ellipsis={{ rows: 2 }}>
-                            {course.description}
-                          </Paragraph>
+                          <div style={{
+                            color: 'rgba(0, 0, 0, 0.45)',
+                            lineHeight: '1.5',
+                            maxHeight: '3em',
+                            overflow: 'hidden'
+                          }}>
+                            {course.description.length > 100 ? course.description.substring(0, 100) + '...' : course.description}
+                          </div>
                         )}
 
                         <div className="attendance-progress">

@@ -311,7 +311,6 @@ const QRScanPage: React.FC = () => {
                       <div className="scan-overlay">
                         <QrReader
                           onResult={handleScan}
-                          onError={handleError}
                           constraints={{ 
                             facingMode: 'environment',
                             width: 400,

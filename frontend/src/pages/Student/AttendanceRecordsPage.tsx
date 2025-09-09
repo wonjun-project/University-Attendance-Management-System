@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Table,
@@ -133,11 +133,7 @@ const AttendanceRecordsPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
 
-  useEffect(() => {
-    loadAttendanceData();
-  }, [selectedCourse, dateRange, pagination.current]);
-
-  const loadAttendanceData = async () => {
+  const loadAttendanceData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -161,7 +157,11 @@ const AttendanceRecordsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCourse, dateRange]); // pagination 무한 루프 방지를 위해 제거
+
+  useEffect(() => {
+    loadAttendanceData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 상태별 색상 및 아이콘 반환
   const getStatusDisplay = (status: string) => {
@@ -406,7 +406,7 @@ const AttendanceRecordsPage: React.FC = () => {
                 <RangePicker
                   placeholder={['시작일', '종료일']}
                   value={dateRange}
-                  onChange={setDateRange}
+                  onChange={setDateRange as any}
                 />
               </Space>
             }

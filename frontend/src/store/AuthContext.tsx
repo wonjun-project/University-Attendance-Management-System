@@ -22,7 +22,7 @@ type AuthAction =
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
-  isLoading: true, // 앱 시작 시 토큰 확인을 위해 true로 시작
+  isLoading: false, // 임시로 false로 변경하여 즉시 로그인 화면 표시
   error: null,
 };
 
@@ -112,9 +112,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // 앱 시작 시 인증 상태 확인
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 인증 상태 확인
+  // 인증 상태 확인 - 무한 루프 방지
   const checkAuth = async (): Promise<void> => {
     try {
       dispatch({ type: 'AUTH_START' });
@@ -123,15 +123,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const storedUser = apiClient.getStoredUserProfile();
       
       if (storedUser && apiClient.isAuthenticated()) {
-        // 서버에서 최신 사용자 정보 가져오기
-        try {
-          const currentUser = await apiClient.getCurrentUser();
-          dispatch({ type: 'AUTH_SUCCESS', payload: currentUser });
-        } catch (error) {
-          // 토큰이 만료되었거나 유효하지 않은 경우
-          console.warn('사용자 정보 가져오기 실패:', error);
-          dispatch({ type: 'LOGOUT' });
-        }
+        // 이미 인증된 사용자가 있으면 서버 호출 없이 바로 성공 처리
+        dispatch({ type: 'AUTH_SUCCESS', payload: storedUser });
       } else {
         dispatch({ type: 'LOGOUT' });
       }

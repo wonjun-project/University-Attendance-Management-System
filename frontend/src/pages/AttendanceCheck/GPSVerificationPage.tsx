@@ -214,21 +214,19 @@ const GPSVerificationPage: React.FC = () => {
     try {
       setLoading(true);
 
-      const response = await apiClient.post('/api/attendance/verify-location', {
+      const response = await apiClient.verifyLocation({
         recordId: attendanceData.recordId,
         studentLatitude: location.latitude,
         studentLongitude: location.longitude,
         accuracy: location.accuracy
       });
 
-      if (response.data.success) {
-        setAttendanceData({
-          ...attendanceData,
-          ...response.data.data
-        });
-        setCurrentStep(2);
-        message.success('GPS 위치 인증이 완료되었습니다!');
-      }
+      setAttendanceData({
+        ...attendanceData,
+        ...response
+      });
+      setCurrentStep(2);
+      message.success('GPS 위치 인증이 완료되었습니다!');
 
     } catch (error: any) {
       console.error('GPS 검증 실패:', error);
@@ -268,23 +266,21 @@ const GPSVerificationPage: React.FC = () => {
     try {
       setLoading(true);
 
-      const response = await apiClient.post('/api/attendance/verify-auth-code', {
+      const response = await apiClient.verifyAuthCode({
         recordId: attendanceData.recordId,
         authCode: values.authCode
       });
 
-      if (response.data.success) {
-        setCompleted(true);
-        setAuthCodeModal(false);
-        setCurrentStep(3);
+      setCompleted(true);
+      setAuthCodeModal(false);
+      setCurrentStep(3);
+      
+      const status = response.status;
+      const isLate = response.isLate;
         
-        const status = response.data.data.status;
-        const isLate = response.data.data.isLate;
-        
-        message.success(
-          `출석 체크가 완료되었습니다! (${status === 'present' ? '출석' : '지각'})`
-        );
-      }
+      message.success(
+        `출석 체크가 완료되었습니다! (${status === 'present' ? '출석' : '지각'})`
+      );
 
     } catch (error: any) {
       console.error('인증 코드 검증 실패:', error);
@@ -398,7 +394,7 @@ const GPSVerificationPage: React.FC = () => {
                 <Title level={4}>위치 수집 완료</Title>
                 
                 <div className="accuracy-badge">
-                  <Tag color={getAccuracyColor(location.accuracy)} size="large">
+                  <Tag color={getAccuracyColor(location.accuracy)}>
                     정확도: {getAccuracyText(location.accuracy)}
                     {location.accuracy && ` (±${location.accuracy.toFixed(0)}m)`}
                   </Tag>

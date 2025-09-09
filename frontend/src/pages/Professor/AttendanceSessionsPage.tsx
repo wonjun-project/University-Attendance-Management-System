@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Table,
@@ -140,11 +140,7 @@ const AttendanceSessionsPage: React.FC = () => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [manualForm] = Form.useForm();
 
-  useEffect(() => {
-    loadData();
-  }, [selectedCourse, dateRange, pagination.current]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -168,7 +164,11 @@ const AttendanceSessionsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCourse, dateRange]); // pagination 무한 루프 방지를 위해 제거
+
+  useEffect(() => {
+    loadData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 세션 상태 토글
   const toggleSessionStatus = async (sessionId: string, isActive: boolean) => {
@@ -420,7 +420,7 @@ const AttendanceSessionsPage: React.FC = () => {
               <RangePicker
                 placeholder={['시작일', '종료일']}
                 value={dateRange}
-                onChange={setDateRange}
+                onChange={setDateRange as any}
               />
             </Space>
           </Card>

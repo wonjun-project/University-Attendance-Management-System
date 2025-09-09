@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Row,
@@ -150,23 +150,7 @@ const AttendanceStatisticsPage: React.FC = () => {
   const [showSessionChart, setShowSessionChart] = useState(true);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
 
-  useEffect(() => {
-    loadCourses();
-  }, []);
-
-  useEffect(() => {
-    if (courseId) {
-      setSelectedCourse(courseId);
-    }
-  }, [courseId]);
-
-  useEffect(() => {
-    if (selectedCourse) {
-      loadCourseStats();
-    }
-  }, [selectedCourse]);
-
-  const loadCourses = async () => {
+  const loadCourses = useCallback(async () => {
     try {
       const coursesData = await apiClient.getCourses();
       setCourses(coursesData);
@@ -177,9 +161,9 @@ const AttendanceStatisticsPage: React.FC = () => {
     } catch (error) {
       console.error('강의 목록 로드 실패:', error);
     }
-  };
+  }, []);
 
-  const loadCourseStats = async () => {
+  const loadCourseStats = useCallback(async () => {
     if (!selectedCourse) return;
 
     try {
@@ -191,7 +175,23 @@ const AttendanceStatisticsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCourse]);
+
+  useEffect(() => {
+    loadCourses();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (courseId) {
+      setSelectedCourse(courseId);
+    }
+  }, [courseId]);
+
+  useEffect(() => {
+    if (selectedCourse) {
+      loadCourseStats();
+    }
+  }, [selectedCourse]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 출석률에 따른 등급 및 색상
   const getAttendanceGrade = (rate: number) => {
@@ -391,7 +391,7 @@ const AttendanceStatisticsPage: React.FC = () => {
               <RangePicker
                 placeholder={['시작일', '종료일']}
                 value={dateRange}
-                onChange={setDateRange}
+                onChange={setDateRange as any}
               />
 
               <Switch

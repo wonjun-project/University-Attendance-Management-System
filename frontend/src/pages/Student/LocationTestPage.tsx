@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Card,
   Button,
@@ -233,17 +233,17 @@ const LocationTestPage: React.FC = () => {
     }
   };
 
-  // 평균 정확도 계산
-  const getAverageAccuracy = () => {
+  // 평균 정확도 계산 (useMemo로 최적화)
+  const averageAccuracy = useMemo(() => {
     if (accuracyHistory.length === 0) return 0;
     return accuracyHistory.reduce((sum, acc) => sum + acc, 0) / accuracyHistory.length;
-  };
+  }, [accuracyHistory]);
 
   const renderLocationResult = () => {
     if (!locationData) return null;
 
     const accuracyInfo = getAccuracyGrade(locationData.accuracy);
-    const averageAccuracy = getAverageAccuracy();
+    // averageAccuracy는 이미 useMemo로 계산됨
 
     return (
       <Card className={`location-card ${accuracyInfo.grade}`}>
@@ -341,19 +341,19 @@ const LocationTestPage: React.FC = () => {
       {
         title: '위치 권한 요청',
         description: '브라우저에서 위치 접근을 허용합니다',
-        status: locationStatus === 'idle' ? 'wait' : 'finish',
+        status: (locationStatus === 'idle' ? 'wait' : 'finish') as 'wait' | 'finish',
         icon: <InfoCircleOutlined />
       },
       {
         title: 'GPS 신호 수신',
         description: '정확한 위치 정보를 수집합니다',
-        status: locationStatus === 'requesting' ? 'process' : locationStatus === 'success' ? 'finish' : 'wait',
+        status: (locationStatus === 'requesting' ? 'process' : locationStatus === 'success' ? 'finish' : 'wait') as 'process' | 'finish' | 'wait',
         icon: <EnvironmentOutlined />
       },
       {
         title: '정확도 분석',
         description: '위치 정확도를 분석하고 평가합니다',
-        status: locationStatus === 'success' ? 'finish' : 'wait',
+        status: (locationStatus === 'success' ? 'finish' : 'wait') as 'finish' | 'wait',
         icon: <CheckCircleOutlined />
       }
     ];
@@ -362,7 +362,7 @@ const LocationTestPage: React.FC = () => {
       <div className="status-steps">
         <Steps
           current={locationStatus === 'idle' ? 0 : locationStatus === 'requesting' ? 1 : 2}
-          items={steps}
+          items={steps as any}
         />
       </div>
     );

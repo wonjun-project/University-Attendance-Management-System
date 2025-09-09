@@ -1,67 +1,193 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, Card, Typography, Divider, Alert, Space } from 'antd';
-import { UserOutlined, LockOutlined, BookOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Alert, Space, Typography } from 'antd';
+import { UserOutlined, LockOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
+import { useTheme } from '../../styles/ThemeContext';
 import styled from 'styled-components';
 
 const { Title, Text } = Typography;
 
-// 스타일드 컴포넌트
+// 모바일 퍼스트 스타일드 컴포넌트
 const LoginContainer = styled.div`
   min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  flex-direction: column;
+  background: ${({ theme }) => theme.colors.background.primary};
+  position: relative;
+  
+  @media (min-width: ${({ theme }) => theme.breakpoints.tablet}) {
+    align-items: center;
+    justify-content: center;
+    padding: ${({ theme }) => theme.spacing.lg};
+  }
 `;
 
-const LoginCard = styled(Card)`
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
-  border: none;
+const ThemeToggle = styled.button`
+  position: absolute;
+  top: ${({ theme }) => theme.spacing.lg};
+  right: ${({ theme }) => theme.spacing.lg};
+  width: 48px;
+  height: 48px;
+  border-radius: ${({ theme }) => theme.borderRadius.full};
+  background: ${({ theme }) => theme.colors.background.elevated};
+  border: 1px solid ${({ theme }) => theme.colors.border.light};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: ${({ theme }) => theme.typography.fontSize.lg};
+  color: ${({ theme }) => theme.colors.text.secondary};
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+  transition: all ${({ theme }) => theme.transitions.fast};
+  z-index: 10;
+  
+  &:hover {
+    background: ${({ theme }) => theme.colors.primary[50]};
+    color: ${({ theme }) => theme.colors.primary[500]};
+    transform: translateY(-1px);
+    box-shadow: ${({ theme }) => theme.shadows.md};
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const LoginContent = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: ${({ theme }) => theme.spacing.xl} ${({ theme }) => theme.spacing.lg};
+  max-width: 100%;
+  
+  @media (min-width: ${({ theme }) => theme.breakpoints.tablet}) {
+    max-width: 400px;
+    background: ${({ theme }) => theme.colors.background.elevated};
+    border-radius: ${({ theme }) => theme.borderRadius.xl};
+    box-shadow: ${({ theme }) => theme.shadows.lg};
+    border: 1px solid ${({ theme }) => theme.colors.border.light};
+  }
 `;
 
 const LogoSection = styled.div`
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: ${({ theme }) => theme.spacing['2xl']};
 `;
 
-const LogoIcon = styled.div`
-  font-size: 48px;
-  color: #1890ff;
-  margin-bottom: 16px;
+const LogoText = styled.div`
+  font-size: ${({ theme }) => theme.typography.fontSize['2xl']};
+  font-weight: ${({ theme }) => theme.typography.fontWeight.bold};
+  color: ${({ theme }) => theme.colors.primary[500]};
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
+  
+  @media (min-width: ${({ theme }) => theme.breakpoints.tablet}) {
+    font-size: ${({ theme }) => theme.typography.fontSize['3xl']};
+  }
+`;
+
+const LogoSubtext = styled.div`
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  color: ${({ theme }) => theme.colors.text.secondary};
+  line-height: ${({ theme }) => theme.typography.lineHeight.relaxed};
 `;
 
 const StyledForm = styled(Form)`
+  .ant-form-item {
+    margin-bottom: ${({ theme }) => theme.spacing.lg};
+  }
+  
   .ant-form-item-label > label {
-    font-weight: 500;
+    font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
+    color: ${({ theme }) => theme.colors.text.primary};
+    font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  }
+  
+  .ant-input, .ant-input-password {
+    height: 52px;
+    border-radius: ${({ theme }) => theme.borderRadius.lg};
+    border: 1px solid ${({ theme }) => theme.colors.border.medium};
+    font-size: ${({ theme }) => theme.typography.fontSize.base};
+    
+    &:focus, &:focus-within {
+      border-color: ${({ theme }) => theme.colors.primary[500]};
+      box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.primary[500]}20;
+    }
+  }
+  
+  .ant-input-prefix {
+    color: ${({ theme }) => theme.colors.text.secondary};
+    margin-right: ${({ theme }) => theme.spacing.sm};
   }
 `;
 
 const LoginButton = styled(Button)`
   width: 100%;
-  height: 48px;
-  font-size: 16px;
-  font-weight: 500;
-  border-radius: 8px;
+  height: 52px;
+  font-size: ${({ theme }) => theme.typography.fontSize.base};
+  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
+  border-radius: ${({ theme }) => theme.borderRadius.lg};
+  background: ${({ theme }) => theme.colors.primary[500]};
+  border: none;
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+  transition: all ${({ theme }) => theme.transitions.fast};
+  
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.primary[600]} !important;
+    transform: translateY(-1px);
+    box-shadow: ${({ theme }) => theme.shadows.md};
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const DemoSection = styled.div`
+  margin-top: ${({ theme }) => theme.spacing.xl};
+  padding: ${({ theme }) => theme.spacing.lg};
+  background: ${({ theme }) => theme.colors.background.secondary};
+  border-radius: ${({ theme }) => theme.borderRadius.lg};
+  border: 1px solid ${({ theme }) => theme.colors.border.light};
+`;
+
+const DemoGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.spacing.sm};
+  margin-top: ${({ theme }) => theme.spacing.sm};
+`;
+
+const DemoButton = styled(Button)`
+  height: 40px;
+  border-radius: ${({ theme }) => theme.borderRadius.md};
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
+  border: 1px solid ${({ theme }) => theme.colors.border.medium};
+  transition: all ${({ theme }) => theme.transitions.fast};
+  
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary[500]};
+    color: ${({ theme }) => theme.colors.primary[500]};
+  }
 `;
 
 const RegisterLink = styled.div`
   text-align: center;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid #f0f0f0;
-`;
-
-const DemoSection = styled.div`
-  margin-top: 24px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  margin-top: ${({ theme }) => theme.spacing.xl};
+  padding-top: ${({ theme }) => theme.spacing.lg};
+  border-top: 1px solid ${({ theme }) => theme.colors.border.light};
+  
+  a {
+    color: ${({ theme }) => theme.colors.primary[500]};
+    font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
+    text-decoration: none;
+    
+    &:hover {
+      color: ${({ theme }) => theme.colors.primary[600]};
+      text-decoration: underline;
+    }
+  }
 `;
 
 interface LoginFormValues {
@@ -73,22 +199,23 @@ const LoginPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, error, clearError } = useAuth();
+  const { mode, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 이미 로그인된 경우 대시보드로 리다이렉트
+  // 이미 로그인된 경우 대시보드로 리다이렉트 - 무한 루프 방지
   useEffect(() => {
     if (isAuthenticated) {
       const from = (location.state as any)?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, location]);
+  }, [isAuthenticated]); // navigate, location 의존성 제거
 
-  // 에러 클리어 (컴포넌트 마운트 시)
+  // 에러 클리어 (컴포넌트 마운트 시) - 무한 루프 방지
   useEffect(() => {
     clearError();
-    return () => clearError(); // cleanup
-  }, [clearError]);
+    // cleanup 제거로 무한 루프 방지
+  }, []); // clearError 의존성 제거
 
   // 로그인 처리
   const handleLogin = async (values: LoginFormValues) => {
@@ -116,17 +243,18 @@ const LoginPage: React.FC = () => {
 
   return (
     <LoginContainer>
-      <LoginCard>
+      <ThemeToggle onClick={toggleTheme} type="button">
+        {mode === 'light' ? <MoonOutlined /> : <SunOutlined />}
+      </ThemeToggle>
+      
+      <LoginContent>
         <LogoSection>
-          <LogoIcon>
-            <BookOutlined />
-          </LogoIcon>
-          <Title level={2} style={{ marginBottom: 8, color: '#1890ff' }}>
-            대학 출결관리시스템
-          </Title>
-          <Text type="secondary">
-            QR 코드와 GPS를 활용한 스마트 출석 체크
-          </Text>
+          <LogoText>
+            출결체크
+          </LogoText>
+          <LogoSubtext>
+            스마트 출석 관리 시스템
+          </LogoSubtext>
         </LogoSection>
 
         {error && (
@@ -137,14 +265,18 @@ const LoginPage: React.FC = () => {
             showIcon
             closable
             onClose={clearError}
-            style={{ marginBottom: 24 }}
+            style={{ 
+              marginBottom: '24px',
+              borderRadius: '12px',
+              border: 'none'
+            }}
           />
         )}
 
         <StyledForm
           form={form}
           name="login"
-          onFinish={handleLogin}
+          onFinish={handleLogin as any}
           autoComplete="off"
           size="large"
         >
@@ -158,8 +290,8 @@ const LoginPage: React.FC = () => {
           >
             <Input 
               prefix={<UserOutlined />} 
-              placeholder="이메일을 입력하세요"
-              style={{ borderRadius: '8px' }}
+              placeholder="student@university.ac.kr"
+              size="large"
             />
           </Form.Item>
 
@@ -174,52 +306,61 @@ const LoginPage: React.FC = () => {
             <Input.Password 
               prefix={<LockOutlined />} 
               placeholder="비밀번호를 입력하세요"
-              style={{ borderRadius: '8px' }}
+              size="large"
             />
           </Form.Item>
 
-          <Form.Item style={{ marginBottom: 16 }}>
+          <Form.Item style={{ marginBottom: 0 }}>
             <LoginButton type="primary" htmlType="submit" loading={loading}>
               로그인
             </LoginButton>
           </Form.Item>
         </StyledForm>
 
-        {/* 데모 계정 섹션 */}
         <DemoSection>
-          <Text strong style={{ display: 'block', marginBottom: 12, color: '#666' }}>
+          <Text strong style={{ 
+            display: 'block', 
+            marginBottom: '12px', 
+            fontSize: '14px',
+            textAlign: 'center'
+          }}>
             🎯 데모 계정으로 체험하기
           </Text>
-          <Space size="middle" style={{ width: '100%', justifyContent: 'center' }}>
-            <Button 
-              size="small" 
+          <DemoGrid>
+            <DemoButton 
               onClick={() => handleDemoLogin('student')}
-              style={{ borderRadius: '6px' }}
             >
               학생 계정
-            </Button>
-            <Button 
-              size="small" 
+            </DemoButton>
+            <DemoButton 
               onClick={() => handleDemoLogin('professor')}
-              style={{ borderRadius: '6px' }}
             >
               교수 계정
-            </Button>
-          </Space>
-          <Text type="secondary" style={{ fontSize: '12px', display: 'block', textAlign: 'center', marginTop: '8px' }}>
-            * 데모용 계정으로 모든 기능을 체험할 수 있습니다.
+            </DemoButton>
+          </DemoGrid>
+          <Text 
+            type="secondary" 
+            style={{ 
+              fontSize: '12px', 
+              display: 'block', 
+              textAlign: 'center', 
+              marginTop: '12px',
+              lineHeight: '1.4'
+            }}
+          >
+            데모용 계정으로 모든 기능을 체험할 수 있습니다.
           </Text>
         </DemoSection>
 
         <RegisterLink>
           <Text type="secondary">
             계정이 없으신가요?{' '}
-            <Link to="/register" style={{ color: '#1890ff', fontWeight: 500 }}>
+            <Link to="/register">
               회원가입
             </Link>
           </Text>
         </RegisterLink>
-      </LoginCard>
+      </LoginContent>
     </LoginContainer>
   );
 };
