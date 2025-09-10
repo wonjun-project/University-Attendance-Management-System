@@ -25,7 +25,6 @@ import {
   ReloadOutlined,
   StopOutlined
 } from '@ant-design/icons';
-import QrScanner from 'qr-scanner';
 import { useAuth } from '../../store/AuthContext';
 import { apiClient } from '../../services/api';
 import styled from 'styled-components';
