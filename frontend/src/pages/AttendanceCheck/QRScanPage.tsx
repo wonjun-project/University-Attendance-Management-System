@@ -308,16 +308,34 @@ const QRScanPage: React.FC = () => {
                 ) : scanning && !cameraError ? (
                   <div>
                     <div className="qr-reader-container">
-                      <div className="scan-overlay">
-                        <QrReader
-                          onResult={handleScan}
-                          constraints={{ 
-                            facingMode: 'environment',
-                            width: 400,
-                            height: 400
-                          }}
-                          videoStyle={{ width: '100%' }}
+                      <div style={{ padding: '20px', textAlign: 'center' }}>
+                        <video
+                          ref={videoRef}
+                          style={{ width: '100%', height: '300px', border: '1px solid #d9d9d9' }}
+                          autoPlay
+                          playsInline
                         />
+                        <div style={{ marginTop: '16px' }}>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                // QR 코드 파일 처리 로직 (임시)
+                                handleScan({ text: 'demo-qr-code' });
+                              }
+                            }}
+                            style={{ display: 'none' }}
+                            id="qr-upload"
+                          />
+                          <label htmlFor="qr-upload">
+                            <Button icon={<CameraOutlined />}>
+                              QR 코드 스캔
+                            </Button>
+                          </label>
+                        </div>
                       </div>
                     </div>
                     <Space style={{ marginTop: 16 }}>
