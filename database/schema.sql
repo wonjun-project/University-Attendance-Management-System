@@ -2,7 +2,7 @@
 -- 생성일: 2024-09-08
 
 -- 사용자 테이블 (학생, 교수)
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE users (
 );
 
 -- 강의 테이블
-CREATE TABLE courses (
+CREATE TABLE IF NOT EXISTS courses (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     course_code VARCHAR(20) NOT NULL, -- 강의코드 (예: CS101)
     name VARCHAR(200) NOT NULL, -- 강의명
@@ -33,7 +33,7 @@ CREATE TABLE courses (
 );
 
 -- 수강신청 테이블 (학생-강의 연결)
-CREATE TABLE enrollments (
+CREATE TABLE IF NOT EXISTS enrollments (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -42,7 +42,7 @@ CREATE TABLE enrollments (
 );
 
 -- 출석 세션 테이블 (개별 수업 세션)
-CREATE TABLE attendance_sessions (
+CREATE TABLE IF NOT EXISTS attendance_sessions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     session_date DATE NOT NULL,
@@ -57,7 +57,7 @@ CREATE TABLE attendance_sessions (
 );
 
 -- 출석 기록 테이블
-CREATE TABLE attendance_records (
+CREATE TABLE IF NOT EXISTS attendance_records (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     session_id UUID NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
     student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -75,7 +75,7 @@ CREATE TABLE attendance_records (
 );
 
 -- 시스템 로그 테이블 (보안 및 디버깅용)
-CREATE TABLE system_logs (
+CREATE TABLE IF NOT EXISTS system_logs (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,

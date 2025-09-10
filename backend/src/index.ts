@@ -38,6 +38,9 @@ import attendanceRoutes from './routes/attendance';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 
+// 데이터베이스 초기화
+import { initializeDatabase } from './init-database';
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -112,10 +115,13 @@ app.use(notFound);
 app.use(errorHandler);
 
 // 서버 시작
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`🚀 서버가 포트 ${PORT}에서 실행 중입니다.`);
   console.log(`📊 환경: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS 허용: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log(`🌐 CORS 허용: ${process.env.CORS_ORIGIN || 'http://localhost:3000'}`);
+  
+  // 데이터베이스 초기화
+  await initializeDatabase();
 });
 
 // Graceful shutdown

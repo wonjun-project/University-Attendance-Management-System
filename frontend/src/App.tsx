@@ -7,9 +7,9 @@ import { ThemeProvider, useTheme } from './styles/ThemeContext';
 import AppRouter from './components/Router/AppRouter';
 import './App.css';
 
-// Ant Design 테마 생성 함수
-const createAntdTheme = (mode: 'light' | 'dark', customTheme: any) => ({
-  algorithm: mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+// Ant Design 테마 설정 (라이트 모드만)
+const createAntdTheme = (customTheme: any) => ({
+  algorithm: antdTheme.defaultAlgorithm,
   token: {
     colorPrimary: customTheme.colors.primary[500],
     colorSuccess: customTheme.colors.semantic.success,
@@ -19,9 +19,8 @@ const createAntdTheme = (mode: 'light' | 'dark', customTheme: any) => ({
     borderRadius: parseInt(customTheme.borderRadius.md),
     fontFamily: customTheme.typography.fontFamily.sans,
     fontSize: parseInt(customTheme.typography.fontSize.base),
-    // 다크모드 배경 색상 커스텀
-    colorBgContainer: mode === 'dark' ? customTheme.colors.background.elevated : customTheme.colors.background.primary,
-    colorBgElevated: mode === 'dark' ? customTheme.colors.background.primary : customTheme.colors.background.elevated,
+    colorBgContainer: customTheme.colors.background.primary,
+    colorBgElevated: customTheme.colors.background.elevated,
   },
   components: {
     Button: {
@@ -46,7 +45,7 @@ const createAntdTheme = (mode: 'light' | 'dark', customTheme: any) => ({
     Form: {
       itemMarginBottom: parseInt(customTheme.spacing.lg),
       labelFontSize: parseInt(customTheme.typography.fontSize.sm),
-      labelColor: mode === 'dark' ? customTheme.colors.text.primary : customTheme.colors.text.primary,
+      labelColor: customTheme.colors.text.primary,
     },
     Alert: {
       borderRadius: parseInt(customTheme.borderRadius.lg),
@@ -57,10 +56,10 @@ const createAntdTheme = (mode: 'light' | 'dark', customTheme: any) => ({
   },
 });
 
-// AppContent 컴포넌트 (테마 컨텍스트 사용)
+// AppContent 컴포넌트
 const AppContent: React.FC = () => {
-  const { theme, mode } = useTheme();
-  const antdThemeConfig = createAntdTheme(mode, theme);
+  const { theme } = useTheme();
+  const antdThemeConfig = createAntdTheme(theme);
 
   return (
     <ConfigProvider locale={koKR} theme={antdThemeConfig}>

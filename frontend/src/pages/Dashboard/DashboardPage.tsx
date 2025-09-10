@@ -12,7 +12,6 @@ import {
   FireOutlined,
   TrophyOutlined
 } from '@ant-design/icons';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
 import { apiClient } from '../../services/api';
@@ -156,11 +155,10 @@ const QuickActionCard = styled(Card)`
 const StatsSection = styled.div`
   margin: clamp(20px, 5vw, 32px) 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: clamp(16px, 4vw, 20px);
 
   @media (max-width: 768px) {
-    grid-template-columns: 1fr;
     gap: 12px;
     margin: 16px 0;
   }
@@ -313,32 +311,6 @@ const StreakWidget = styled.div`
   }
 `;
 
-// 주간 차트 위젯
-const ChartWidget = styled.div`
-  .chart-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: clamp(12px, 3vw, 20px);
-    
-    h3 {
-      margin: 0;
-      color: rgb(23, 23, 23);
-      font-family: 'Geist, Arial, sans-serif';
-      font-size: clamp(14px, 3.5vw, 16px);
-      font-weight: 600;
-    }
-  }
-
-  .chart-container {
-    height: clamp(100px, 15vw, 120px);
-    margin-top: clamp(12px, 3vw, 16px);
-    
-    @media (max-width: 480px) {
-      height: 80px;
-    }
-  }
-`;
 
 interface Course {
   id: string;
@@ -383,16 +355,6 @@ const DashboardPage: React.FC = () => {
     ]
   });
 
-  // 주간 출석 차트 데이터
-  const [weeklyData] = useState([
-    { day: '월', attendance: 95 },
-    { day: '화', attendance: 88 },
-    { day: '수', attendance: 92 },
-    { day: '목', attendance: 85 },
-    { day: '금', attendance: 97 },
-    { day: '토', attendance: 0 },
-    { day: '일', attendance: 0 },
-  ]);
 
   // 실시간 시간 업데이트
   useEffect(() => {
@@ -735,74 +697,6 @@ const DashboardPage: React.FC = () => {
           </StreakWidget>
         </StatCard>
 
-        {/* 주간 출석 차트 */}
-        <StatCard>
-          <ChartWidget>
-            <div className="chart-header">
-              <h3>주간 출석률</h3>
-              <BarChartOutlined style={{ color: 'rgb(0, 114, 245)' }} />
-            </div>
-            
-            <div style={{ 
-              fontSize: 'clamp(20px, 5vw, 24px)', 
-              fontWeight: '600', 
-              color: 'rgb(0, 114, 245)',
-              fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-              marginBottom: 'clamp(6px, 1.5vw, 8px)'
-            }}>
-              {Math.round(weeklyData.reduce((acc, day) => acc + day.attendance, 0) / 5)}%
-            </div>
-            <div style={{ 
-              fontSize: 'clamp(10px, 2.5vw, 12px)', 
-              color: 'rgb(136, 136, 136)',
-              marginBottom: 'clamp(12px, 3vw, 16px)',
-              fontFamily: 'Geist, Arial, sans-serif'
-            }}>
-              이번 주 평균
-            </div>
-
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weeklyData}>
-                  <XAxis 
-                    dataKey="day" 
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: 'rgb(136, 136, 136)' }}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (active && payload && payload.length) {
-                        return (
-                          <div style={{
-                            background: 'white',
-                            border: '1px solid rgb(235, 235, 235)',
-                            borderRadius: '6px',
-                            padding: '8px 12px',
-                            fontSize: '12px',
-                            fontFamily: 'Geist, Arial, sans-serif'
-                          }}>
-                            {`${label}: ${payload[0].value}%`}
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="attendance" 
-                    stroke="rgb(0, 114, 245)" 
-                    strokeWidth={2}
-                    dot={{ fill: 'rgb(0, 114, 245)', strokeWidth: 2, r: 3 }}
-                    activeDot={{ r: 5, stroke: 'rgb(0, 114, 245)', strokeWidth: 2 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartWidget>
-        </StatCard>
       </StatsSection>
 
     </DashboardContainer>

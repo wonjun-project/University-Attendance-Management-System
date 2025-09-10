@@ -20,7 +20,7 @@ interface NavItem {
   roles: ('student' | 'professor')[];
 }
 
-// 핵심 기능만 담은 하단 네비게이션
+// 간소화된 하단 네비게이션 (대시보드만)
 const navItems: NavItem[] = [
   {
     key: 'dashboard',
@@ -28,41 +28,6 @@ const navItems: NavItem[] = [
     label: '홈',
     path: '/dashboard',
     roles: ['student', 'professor'],
-  },
-  {
-    key: 'scan',
-    icon: <ScanOutlined />,
-    label: '출석체크',
-    path: '/attendance/scan',
-    roles: ['student'],
-  },
-  {
-    key: 'qr-generator',
-    icon: <ScanOutlined />,
-    label: 'QR생성',
-    path: '/qr-generator',
-    roles: ['professor'],
-  },
-  {
-    key: 'courses',
-    icon: <BookOutlined />,
-    label: '내 수업',
-    path: '/my-courses',
-    roles: ['student'],
-  },
-  {
-    key: 'courses-manage',
-    icon: <BookOutlined />,
-    label: '수업관리',
-    path: '/courses',
-    roles: ['professor'],
-  },
-  {
-    key: 'statistics',
-    icon: <BarChartOutlined />,
-    label: '통계',
-    path: '/statistics',
-    roles: ['professor'],
   },
 ];
 

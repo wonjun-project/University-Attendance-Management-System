@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, Alert, Space, Typography } from 'antd';
-import { UserOutlined, LockOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../styles/ThemeContext';
@@ -23,35 +23,7 @@ const LoginContainer = styled.div`
   }
 `;
 
-const ThemeToggle = styled.button`
-  position: absolute;
-  top: ${({ theme }) => theme.spacing.lg};
-  right: ${({ theme }) => theme.spacing.lg};
-  width: 48px;
-  height: 48px;
-  border-radius: ${({ theme }) => theme.borderRadius.full};
-  background: ${({ theme }) => theme.colors.background.elevated};
-  border: 1px solid ${({ theme }) => theme.colors.border.light};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: ${({ theme }) => theme.typography.fontSize.lg};
-  color: ${({ theme }) => theme.colors.text.secondary};
-  box-shadow: ${({ theme }) => theme.shadows.sm};
-  transition: all ${({ theme }) => theme.transitions.fast};
-  z-index: 10;
-  
-  &:hover {
-    background: ${({ theme }) => theme.colors.primary[50]};
-    color: ${({ theme }) => theme.colors.primary[500]};
-    transform: translateY(-1px);
-    box-shadow: ${({ theme }) => theme.shadows.md};
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
-`;
+// Telegram 스타일: 테마 토글 버튼 제거 (미니멀 디자인)
 
 const LoginContent = styled.div`
   flex: 1;
@@ -62,10 +34,10 @@ const LoginContent = styled.div`
   max-width: 100%;
   
   @media (min-width: ${({ theme }) => theme.breakpoints.tablet}) {
-    max-width: 400px;
+    max-width: 380px;
     background: ${({ theme }) => theme.colors.background.elevated};
     border-radius: ${({ theme }) => theme.borderRadius.xl};
-    box-shadow: ${({ theme }) => theme.shadows.lg};
+    /* Telegram 스타일: 그림자 최소화 */
     border: 1px solid ${({ theme }) => theme.colors.border.light};
   }
 `;
@@ -76,13 +48,16 @@ const LogoSection = styled.div`
 `;
 
 const LogoText = styled.div`
-  font-size: ${({ theme }) => theme.typography.fontSize['2xl']};
-  font-weight: ${({ theme }) => theme.typography.fontWeight.bold};
+  font-size: 24px;
+  font-weight: 600;
   color: ${({ theme }) => theme.colors.primary[500]};
   margin-bottom: ${({ theme }) => theme.spacing.sm};
   
-  @media (min-width: ${({ theme }) => theme.breakpoints.tablet}) {
-    font-size: ${({ theme }) => theme.typography.fontSize['3xl']};
+  /* Telegram 스타일: 간단한 로고 텍스트 */
+  &::before {
+    content: '📚 ';
+    font-size: 28px;
+    margin-right: 8px;
   }
 `;
 
@@ -104,14 +79,14 @@ const StyledForm = styled(Form)`
   }
   
   .ant-input, .ant-input-password {
-    height: 52px;
+    height: 50px;
     border-radius: ${({ theme }) => theme.borderRadius.lg};
     border: 1px solid ${({ theme }) => theme.colors.border.medium};
-    font-size: ${({ theme }) => theme.typography.fontSize.base};
+    font-size: 16px;
     
+    /* Telegram 스타일: 포커스 시 그림자 제거 */
     &:focus, &:focus-within {
       border-color: ${({ theme }) => theme.colors.primary[500]};
-      box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.primary[500]}20;
     }
   }
   
@@ -123,23 +98,16 @@ const StyledForm = styled(Form)`
 
 const LoginButton = styled(Button)`
   width: 100%;
-  height: 52px;
-  font-size: ${({ theme }) => theme.typography.fontSize.base};
-  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
+  height: 50px;
+  font-size: 16px;
+  font-weight: 600;
   border-radius: ${({ theme }) => theme.borderRadius.lg};
   background: ${({ theme }) => theme.colors.primary[500]};
   border: none;
-  box-shadow: ${({ theme }) => theme.shadows.sm};
-  transition: all ${({ theme }) => theme.transitions.fast};
+  /* Telegram 스타일: 그림자와 애니메이션 제거 */
   
   &:hover:not(:disabled) {
     background: ${({ theme }) => theme.colors.primary[600]} !important;
-    transform: translateY(-1px);
-    box-shadow: ${({ theme }) => theme.shadows.md};
-  }
-  
-  &:active {
-    transform: translateY(0);
   }
 `;
 
@@ -199,7 +167,7 @@ const LoginPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, error, clearError } = useAuth();
-  const { mode, toggleTheme } = useTheme();
+  const { theme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -243,9 +211,6 @@ const LoginPage: React.FC = () => {
 
   return (
     <LoginContainer>
-      <ThemeToggle onClick={toggleTheme} type="button">
-        {mode === 'light' ? <MoonOutlined /> : <SunOutlined />}
-      </ThemeToggle>
       
       <LoginContent>
         <LogoSection>

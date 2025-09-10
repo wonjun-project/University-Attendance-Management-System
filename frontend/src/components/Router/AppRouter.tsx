@@ -15,6 +15,7 @@ import LocationTestPage from '../../pages/Student/LocationTestPage';
 import AttendanceSessionsPage from '../../pages/Professor/AttendanceSessionsPage';
 import AttendanceStatisticsPage from '../../pages/Professor/AttendanceStatisticsPage';
 import CoursesManagePage from '../../pages/Professor/CoursesManagePage';
+import MyPage from '../../pages/MyPage/MyPage';
 
 // 로딩 컴포넌트
 const LoadingSpinner: React.FC = () => (
@@ -127,6 +128,14 @@ const AppRouter: React.FC = () => {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/my-page" 
+        element={
+          <ProtectedRoute>
+            <MyPage />
           </ProtectedRoute>
         } 
       />

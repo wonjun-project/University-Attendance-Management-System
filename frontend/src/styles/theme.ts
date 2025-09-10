@@ -112,46 +112,52 @@ export interface Theme {
 
 export const lightTheme: Theme = {
   colors: {
+    // Telegram 스타일 블루 팔레트
     primary: {
-      50: '#F0F4FF',
-      100: '#E0E9FF',
-      500: '#5B4EF5',
-      600: '#4B3FE6',
-      900: '#2D1B69',
+      50: '#E3F2FD',
+      100: '#BBDEFB', 
+      500: '#2196F3', // Telegram 메인 블루
+      600: '#1976D2',
+      900: '#0D47A1',
     },
+    // 그레이스케일 단순화 (Telegram 스타일)
     gray: {
-      50: '#FAFBFC',
-      100: '#F5F7FA',
-      200: '#E4E7EB',
-      300: '#D1D5DB',
-      400: '#9CA3AF',
-      500: '#6B7280',
-      600: '#4B5563',
-      700: '#374151',
-      800: '#1F2937',
-      900: '#111827',
+      50: '#FAFAFA',
+      100: '#F5F5F5',
+      200: '#EEEEEE',
+      300: '#E0E0E0',
+      400: '#BDBDBD',
+      500: '#9E9E9E',
+      600: '#757575',
+      700: '#616161',
+      800: '#424242',
+      900: '#212121',
     },
+    // 시맨틱 컬러 단순화
     semantic: {
-      success: '#10B981',
-      warning: '#F59E0B',
-      error: '#EF4444',
-      info: '#3B82F6',
+      success: '#4CAF50', // 연한 초록
+      warning: '#FF9800', // 오렌지
+      error: '#F44336',   // 빨강
+      info: '#2196F3',    // 블루
     },
+    // 배경 단순화
     background: {
       primary: '#FFFFFF',
-      secondary: '#FAFBFC',
+      secondary: '#FAFAFA',
       elevated: '#FFFFFF',
     },
+    // 텍스트 컬러 단순화
     text: {
-      primary: '#111827',
-      secondary: '#6B7280',
-      disabled: '#9CA3AF',
+      primary: '#212121',
+      secondary: '#757575',
+      disabled: '#BDBDBD',
       inverse: '#FFFFFF',
     },
+    // 보더 단순화
     border: {
-      light: '#F3F4F6',
-      medium: '#E5E7EB',
-      strong: '#D1D5DB',
+      light: '#F5F5F5',
+      medium: '#E0E0E0',
+      strong: '#BDBDBD',
     },
   },
   spacing: {
@@ -163,44 +169,50 @@ export const lightTheme: Theme = {
     '2xl': '48px',
     '3xl': '64px',
   },
+  // Telegram 스타일: 둥근 모서리 단순화
   borderRadius: {
-    sm: '4px',
-    md: '8px',
-    lg: '12px',
-    xl: '16px',
-    full: '9999px',
+    sm: '6px',    // 작은 요소
+    md: '8px',    // 기본 요소
+    lg: '12px',   // 카드
+    xl: '16px',   // 큰 카드
+    full: '50px', // 원형 (아바타 등)
   },
   typography: {
     fontFamily: {
-      sans: '-apple-system, BlinkMacSystemFont, "Pretendard Variable", Pretendard, "Segoe UI", Roboto, sans-serif',
-      mono: 'SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      // Telegram 스타일 폰트 (시스템 폰트 우선)
+      sans: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Roboto, "Noto Sans KR", sans-serif',
+      mono: 'SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
     },
+    // 폰트 사이즈 단순화 (Telegram 스타일)
     fontSize: {
-      xs: '12px',
-      sm: '14px',
-      base: '16px',
-      lg: '18px',
-      xl: '20px',
-      '2xl': '24px',
-      '3xl': '32px',
+      xs: '12px',   // 캡션
+      sm: '14px',   // 보조 텍스트
+      base: '16px', // 기본 텍스트
+      lg: '17px',   // 제목
+      xl: '20px',   // 큰 제목
+      '2xl': '24px', // 페이지 제목
+      '3xl': '28px', // 로고
     },
+    // 폰트 굵기 단순화
     fontWeight: {
-      normal: 400,
-      medium: 500,
-      semibold: 600,
-      bold: 700,
+      normal: 400,    // 일반 텍스트
+      medium: 500,    // 강조 텍스트
+      semibold: 600,  // 제목
+      bold: 700,      // 중요 제목
     },
+    // 행간 단순화
     lineHeight: {
-      tight: 1.2,
-      normal: 1.5,
-      relaxed: 1.6,
+      tight: 1.3,   // 제목용
+      normal: 1.5,  // 본문용
+      relaxed: 1.6, // 긴 텍스트용
     },
   },
+  // Telegram 스타일: 그림자 최소화
   shadows: {
-    sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-    md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-    xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    sm: 'none',
+    md: '0 1px 3px rgba(0, 0, 0, 0.12)', // 아주 미묘한 그림자만
+    lg: '0 2px 8px rgba(0, 0, 0, 0.15)', // 모달용 그림자만
+    xl: '0 4px 16px rgba(0, 0, 0, 0.15)', // 중요한 요소만
   },
   transitions: {
     fast: '150ms cubic-bezier(0.4, 0, 0.2, 1)',

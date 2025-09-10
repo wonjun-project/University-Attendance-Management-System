@@ -12,8 +12,6 @@ import {
   LogoutOutlined,
   QrcodeOutlined,
   EnvironmentOutlined,
-  MoonOutlined,
-  SunOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
@@ -34,9 +32,12 @@ const StyledHeader = styled(Header)`
   align-items: center;
   justify-content: space-between;
   padding: 0 ${({ theme }) => theme.spacing.md};
-  background: ${({ theme }) => theme.colors.background.elevated};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border.light};
-  box-shadow: ${({ theme }) => theme.shadows.sm};
+  /* Telegram 스타일: 파란색 헤더 */
+  background: ${({ theme }) => theme.colors.primary[500]};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.primary[600]};
+  /* 그림자 제거 */
+  height: 56px;
+  color: white;
   
   @media (max-width: ${({ theme }) => theme.breakpoints.mobile}) {
     padding: 0 ${({ theme }) => theme.spacing.md};
@@ -47,9 +48,9 @@ const LogoArea = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
-  font-size: ${({ theme }) => theme.typography.fontSize.lg};
-  font-weight: ${({ theme }) => theme.typography.fontWeight.semibold};
-  color: ${({ theme }) => theme.colors.primary[500]};
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
 `;
 
 const UserArea = styled.div`
@@ -59,17 +60,16 @@ const UserArea = styled.div`
 `;
 
 const StyledContent = styled(Content)`
-  margin: ${({ theme }) => theme.spacing.lg};
-  padding: ${({ theme }) => theme.spacing.lg};
-  background: ${({ theme }) => theme.colors.background.elevated};
-  border-radius: ${({ theme }) => theme.borderRadius.lg};
-  min-height: calc(100vh - 140px);
+  /* Telegram 스타일: 단순한 콘텐츠 레이아웃 */
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background: ${({ theme }) => theme.colors.background.primary};
+  min-height: calc(100vh - 56px);
   
   @media (max-width: ${({ theme }) => theme.breakpoints.mobile}) {
-    margin: ${({ theme }) => theme.spacing.md};
-    margin-bottom: 100px; /* 하단 네비게이션 공간 확보 */
-    padding: ${({ theme }) => theme.spacing.md};
-    border-radius: ${({ theme }) => theme.borderRadius.md};
+    padding: 16px;
+    padding-bottom: 80px; /* 하단 네비게이션 공간 */
   }
 `;
 
@@ -124,7 +124,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const { user, logout } = useAuth();
-  const { mode, toggleTheme } = useTheme();
+  const { theme: currentTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = theme.useToken();
@@ -144,50 +144,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // 무한 루프 방지를 위한 useEffect 안정화
   const currentPath = location.pathname;
 
-  // 데스크톱용 간소화된 메뉴 (핵심 기능만)
+  // 데스크톱용 간소화된 메뉴 (대시보드만)
   const getMenuItems = (): MenuProps['items'] => {
-    if (user?.role === 'professor') {
-      return [
-        {
-          key: '/dashboard',
-          icon: <DashboardOutlined />,
-          label: '대시보드',
-        },
-        {
-          key: '/qr-generator',
-          icon: <QrcodeOutlined />,
-          label: 'QR 생성',
-        },
-        {
-          key: '/courses',
-          icon: <BookOutlined />,
-          label: '수업 관리',
-        },
-        {
-          key: '/statistics',
-          icon: <BarChartOutlined />,
-          label: '통계',
-        },
-      ];
-    } else {
-      return [
-        {
-          key: '/dashboard',
-          icon: <DashboardOutlined />,
-          label: '대시보드',
-        },
-        {
-          key: '/attendance/scan',
-          icon: <QrcodeOutlined />,
-          label: '출석 체크',
-        },
-        {
-          key: '/my-courses',
-          icon: <BookOutlined />,
-          label: '내 수업',
-        },
-      ];
-    }
+    return [
+      {
+        key: '/dashboard',
+        icon: <DashboardOutlined />,
+        label: '대시보드',
+      },
+    ];
   };
 
   // 메뉴 클릭 핸들러
@@ -222,16 +187,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // 사용자 드롭다운 메뉴
   const userMenuItems: MenuProps['items'] = [
     {
-      key: 'theme-toggle',
-      icon: mode === 'light' ? <MoonOutlined /> : <SunOutlined />,
-      label: mode === 'light' ? '다크모드' : '라이트모드',
-      onClick: toggleTheme,
-    },
-    {
-      key: 'profile',
+      key: 'my-page',
       icon: <UserOutlined />,
-      label: '프로필',
-      onClick: () => navigate('/profile'),
+      label: '마이페이지',
+      onClick: () => navigate('/my-page'),
     },
     {
       type: 'divider',
@@ -297,7 +256,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           selectedKeys={[currentPath]}
           items={getMenuItems()}
           onClick={handleMenuClick}
-          style={{ borderRight: 'none' }}
+          style={{ 
+            borderRight: 'none',
+            background: 'transparent'
+          }}
         />
       </MobileDrawer>
 

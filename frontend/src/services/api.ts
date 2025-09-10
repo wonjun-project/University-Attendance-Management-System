@@ -148,55 +148,30 @@ class ApiClient {
 
   // 인증 API
   async login(credentials: LoginCredentials): Promise<{ user: UserProfile; tokens: AuthTokens }> {
-    // 임시 데모용 로그인 시뮬레이션 (백엔드 연결 실패로 인한)
-    console.log('🎯 데모 로그인 시뮬레이션:', credentials);
+    console.log('🚀 실제 백엔드 로그인 API 호출:', credentials.email);
     
-    // 데모 계정 확인
-    const demoAccounts = {
-      'student1@university.ac.kr': { role: 'student' as const, name: '김학생', studentId: 'STU001' },
-      'professor1@university.ac.kr': { role: 'professor' as const, name: '이교수' }
-    };
+    try {
+      const response: AxiosResponse<ApiResponse<{ user: UserProfile; tokens: AuthTokens }>> = 
+        await this.client.post('/api/auth/login', credentials);
 
-    const demoUser = demoAccounts[credentials.email as keyof typeof demoAccounts];
-    
-    console.log('🔍 데모 계정 검색 결과:', {
-      email: credentials.email,
-      password: credentials.password,
-      foundUser: demoUser,
-      availableAccounts: Object.keys(demoAccounts)
-    });
-    
-    if (demoUser && credentials.password === 'password123') {
-      // 가짜 토큰 생성
-      const fakeTokens: AuthTokens = {
-        accessToken: 'demo_access_token_' + Date.now(),
-        refreshToken: 'demo_refresh_token_' + Date.now(),
-        tokenType: 'Bearer',
-        expiresIn: '3600'
-      };
-
-      // 가짜 사용자 프로필
-      const fakeUser: UserProfile = {
-        id: 'demo_' + demoUser.role,
-        email: credentials.email,
-        name: demoUser.name,
-        role: demoUser.role,
-        phone: '010-1234-5678'
-      };
-
-      // 학생일 때만 studentId 추가
-      if (demoUser.role === 'student' && 'studentId' in demoUser) {
-        fakeUser.studentId = demoUser.studentId;
+      if (response.data.success && response.data.data) {
+        this.saveTokensToStorage(response.data.data.tokens);
+        localStorage.setItem('userProfile', JSON.stringify(response.data.data.user));
+        console.log('✅ 백엔드 로그인 성공:', response.data.data.user);
+        return response.data.data;
       }
 
-      this.saveTokensToStorage(fakeTokens);
-      localStorage.setItem('userProfile', JSON.stringify(fakeUser));
+      throw new Error(response.data.error?.message || '로그인에 실패했습니다.');
+    } catch (error: any) {
+      console.error('❌ 백엔드 로그인 실패:', error);
       
-      console.log('✅ 데모 로그인 성공:', fakeUser);
-      return { user: fakeUser, tokens: fakeTokens };
+      // 네트워크 오류일 경우 상세 메시지 제공
+      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        throw new Error('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
+      }
+      
+      throw new Error(error.response?.data?.error?.message || error.message || '로그인 중 오류가 발생했습니다.');
     }
-
-    throw new Error('데모 계정만 사용 가능합니다. (student1@university.ac.kr / professor1@university.ac.kr, 비밀번호: password123)');
   }
 
   async register(data: RegisterData): Promise<{ user: UserProfile; tokens: AuthTokens }> {

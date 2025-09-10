@@ -39,25 +39,24 @@ export const GlobalStyle = createGlobalStyle<GlobalStyleProps>`
     }
   }
 
-  /* 링크 스타일 */
+  /* Telegram 스타일 링크 */
   a {
     color: ${({ theme }) => theme.colors.primary[500]};
     text-decoration: none;
-    transition: color ${({ theme }) => theme.transitions.fast};
+    transition: none; /* 트랜지션 제거 */
 
     &:hover, &:focus {
       color: ${({ theme }) => theme.colors.primary[600]};
-      text-decoration: underline;
+      /* 언더라인 제거 */
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.primary[500]};
-      outline-offset: 2px;
-      border-radius: ${({ theme }) => theme.borderRadius.sm};
+      outline: 1px solid ${({ theme }) => theme.colors.primary[500]};
+      outline-offset: 1px;
     }
   }
 
-  /* 버튼 리셋 */
+  /* Telegram 스타일 버튼 */
   button {
     font-family: inherit;
     font-size: inherit;
@@ -66,21 +65,20 @@ export const GlobalStyle = createGlobalStyle<GlobalStyleProps>`
     background: none;
     border: none;
     cursor: pointer;
-    transition: all ${({ theme }) => theme.transitions.fast};
+    transition: none; /* 트랜지션 제거 */
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.primary[500]};
-      outline-offset: 2px;
-      border-radius: ${({ theme }) => theme.borderRadius.sm};
+      outline: 1px solid ${({ theme }) => theme.colors.primary[500]};
+      outline-offset: 1px;
     }
 
     &:disabled {
       cursor: not-allowed;
-      opacity: 0.6;
+      opacity: 0.5; /* 더 뚜렷한 비활성화 */
     }
   }
 
-  /* 입력 필드 스타일 */
+  /* Telegram 스타일 입력 필드 */
   input, textarea, select {
     font-family: inherit;
     font-size: inherit;
@@ -89,12 +87,12 @@ export const GlobalStyle = createGlobalStyle<GlobalStyleProps>`
     background-color: ${({ theme }) => theme.colors.background.primary};
     border: 1px solid ${({ theme }) => theme.colors.border.medium};
     border-radius: ${({ theme }) => theme.borderRadius.md};
-    transition: border-color ${({ theme }) => theme.transitions.fast}, box-shadow ${({ theme }) => theme.transitions.fast};
+    transition: none; /* 트랜지션 제거 */
 
     &:focus {
       outline: none;
       border-color: ${({ theme }) => theme.colors.primary[500]};
-      box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.primary[500]}20;
+      /* 그림자 제거 */
     }
 
     &::placeholder {
