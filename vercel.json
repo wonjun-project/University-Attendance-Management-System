@@ -25,11 +25,11 @@
     }
   ],
   "env": {
-    "REACT_APP_API_BASE_URL": "@api-base-url"
+    "REACT_APP_API_BASE_URL": "https://university-attendance-backend.railway.app"
   },
   "build": {
     "env": {
-      "REACT_APP_API_BASE_URL": "@api-base-url"
+      "REACT_APP_API_BASE_URL": "https://university-attendance-backend.railway.app"
     }
   },
   "regions": ["icn1"],
