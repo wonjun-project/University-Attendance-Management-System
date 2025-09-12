@@ -1,0 +1,41 @@
+# Backend files
+backend/
+frontend/
+
+# Test files
+test-screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# Development files
+*.log
+*.txt
+*.js
+!next.config.js
+!tailwind.config.js
+
+# Database migrations (not needed for deployment)
+database/migrations/
+
+# Scripts
+scripts/
+
+# Analysis files
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!vercel.json
+
+# Temporary files
+tmp/
+temp/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

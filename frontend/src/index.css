@@ -1,0 +1,94 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Ant Design ellipsis 완전 비활성화 */
+.ant-typography,
+.ant-typography-ellipsis,
+.ant-typography-ellipsis-single-line,
+.ant-typography-ellipsis-multiple-line,
+.ant-typography p,
+.ant-typography div,
+.ant-typography span {
+  display: block !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+}
+
+/* ResizeObserver 관련 ellipsis 측정 컴포넌트 완전 비활성화 */
+.ant-typography-ellipsis-container,
+.ant-typography-measure,
+.ant-typography-measure-text {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* 모든 가능한 ellipsis 관련 클래스 비활성화 */
+*[class*="ellipsis"] {
+  display: block !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+}
+
+/* Ant Design Typography 컴포넌트의 ellipsis 기능 강제 비활성화 */
+.ant-typography.ant-typography-ellipsis,
+.ant-typography.ant-typography-ellipsis-single-line,
+.ant-typography.ant-typography-ellipsis-multiple-line,
+.ant-typography .ant-typography-ellipsis,
+.ant-typography .ant-typography-ellipsis-single-line,
+.ant-typography .ant-typography-ellipsis-multiple-line {
+  display: block !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+  line-height: inherit !important;
+  max-height: none !important;
+  height: auto !important;
+}
+
+/* 전역 ellipsis 스타일 완전 차단 */
+* {
+  text-overflow: clip !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+}
+
+/* ResizeObserver 및 MutationObserver 관련 모든 ellipsis 기능 차단 */
+div[style*="text-overflow"],
+span[style*="text-overflow"],
+p[style*="text-overflow"],
+div[style*="ellipsis"],
+span[style*="ellipsis"],
+p[style*="ellipsis"] {
+  text-overflow: clip !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+}

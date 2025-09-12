@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply font-sans antialiased;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  /* 기본 버튼 스타일 */
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-medium;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  }
+  
+  .btn-ghost {
+    @apply hover:bg-gray-100 text-gray-600 px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  }
+  
+  /* Form input styles */
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors duration-200;
+  }
+  
+  /* Card styles */
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-soft;
+  }
+  
+  .card-hover {
+    @apply hover:shadow-medium transition-shadow duration-200;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Html5Qrcode Video Styling - Force video element to display properly */
+#qr-reader-pure video {
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  object-fit: cover !important;
+  border-radius: 8px;
+  display: block !important;
+  visibility: visible !important;
+  background: #000;
+  min-height: 200px !important;
+}
+
+#qr-reader-pure {
+  position: relative !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 300px !important;
+  display: block !important;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Html5Qrcode canvas styling */
+#qr-reader-pure canvas {
+  display: none !important;
+}
+
+/* Html5Qrcode default styling overrides */
+#qr-reader-pure * {
+  box-sizing: border-box !important;
+}
+
+#qr-reader-pure div {
+  width: 100% !important;
+}
+
+/* Ensure video takes full container size */
+#qr-reader-pure video,
+#qr-reader-pure video:focus {
+  outline: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 400px !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
