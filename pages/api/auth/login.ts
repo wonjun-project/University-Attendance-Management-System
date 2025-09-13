@@ -60,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
 
     res.setHeader('Set-Cookie', [
-      `auth-token=${encodeURIComponent(sessionData)}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax${
+      `auth-token=${encodeURIComponent(sessionData)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax${
         process.env.NODE_ENV === 'production' ? '; Secure' : ''
       }`
     ])
