@@ -6,7 +6,8 @@
   "devCommand": "npm run dev",
   "regions": ["icn1"],
   "functions": {
-    "app/api/**/*.js": {
+    "app/api/**/route.js": {
+      "runtime": "nodejs18.x",
       "maxDuration": 30
     }
   },
