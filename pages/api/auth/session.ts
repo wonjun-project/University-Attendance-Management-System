@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { validateSession } from '../../../lib/auth-simple'
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // CORS headers
@@ -22,7 +21,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     let sessionData = null
     if (req.headers.cookie) {
       const cookieHeader = req.headers.cookie
-      const sessionMatch = cookieHeader.match(/simple-session=([^;]+)/)
+      const sessionMatch = cookieHeader.match(/auth-token=([^;]+)/)
       if (sessionMatch) {
         sessionData = sessionMatch[1]
       }
@@ -33,10 +32,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return
     }
 
-    const session = validateSession(sessionData)
+    const session = JSON.parse(decodeURIComponent(sessionData))
 
-    if (!session) {
-      res.status(401).json({ error: 'Invalid or expired session' })
+    // 만료 확인
+    if (Date.now() > session.expires) {
+      res.status(401).json({ error: 'Session expired' })
       return
     }
 

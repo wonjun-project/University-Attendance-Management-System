@@ -19,7 +19,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // 세션 쿠키 제거
     res.setHeader('Set-Cookie', [
-      `simple-session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${
+      `auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${
         process.env.NODE_ENV === 'production' ? '; Secure' : ''
       }`
     ])
