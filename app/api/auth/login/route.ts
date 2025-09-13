@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateStudent, authenticateProfessor, generateToken, setAuthCookie } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,20 +13,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (userType !== 'student' && userType !== 'professor') {
-      return NextResponse.json(
-        { error: '올바르지 않은 사용자 타입입니다' },
-        { status: 400 }
-      )
-    }
-
+    // 하드코딩된 테스트 계정 (데이터베이스 없이)
     let user = null
 
-    // Authenticate based on user type
-    if (userType === 'student') {
-      user = await authenticateStudent(id, password)
-    } else if (userType === 'professor') {
-      user = await authenticateProfessor(id, password)
+    if (userType === 'student' && id === 'stu001' && password === 'password123') {
+      user = {
+        id: 'stu001',
+        name: '테스트 학생',
+        type: 'student'
+      }
+    } else if (userType === 'professor' && id === 'prof001' && password === 'password123') {
+      user = {
+        id: 'prof001',
+        name: '테스트 교수',
+        type: 'professor'
+      }
     }
 
     if (!user) {
@@ -40,19 +40,15 @@ export async function POST(request: NextRequest) {
 
     console.log('Authentication successful:', user)
 
-    // Generate JWT token
-    const sessionData = {
+    // 간단한 세션 데이터 (JWT 없이)
+    const sessionData = JSON.stringify({
       userId: user.id,
       userType: user.type,
-      name: user.name
-    }
+      name: user.name,
+      expires: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7일
+    })
 
-    const token = generateToken(sessionData)
-
-    // Set auth cookie
-    setAuthCookie(token)
-
-    // Return success response
+    // Return success response with cookie
     const response = NextResponse.json({
       success: true,
       user: {
@@ -60,6 +56,14 @@ export async function POST(request: NextRequest) {
         name: user.name,
         type: user.type
       }
+    })
+
+    // 간단한 세션 쿠키 설정
+    response.cookies.set('auth-token', encodeURIComponent(sessionData), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
     })
 
     return response
