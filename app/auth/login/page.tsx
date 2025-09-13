@@ -50,15 +50,20 @@ export default function LoginPage() {
       console.log('Login successful, user type:', data.user?.type)
 
       // Refresh auth context before redirecting
+      console.log('Refreshing user context...')
       await refreshUser()
+      console.log('User context refreshed successfully')
+
+      // Wait a bit more to ensure auth context is fully updated
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       // Redirect based on user type
       if (data.user?.type === 'student') {
         console.log('Redirecting to /student')
-        router.push('/student')
+        window.location.href = '/student'
       } else if (data.user?.type === 'professor') {
         console.log('Redirecting to /professor')
-        router.push('/professor')
+        window.location.href = '/professor'
       } else {
         console.log('Unknown user type:', data.user?.type)
         setError('사용자 타입을 알 수 없습니다.')
