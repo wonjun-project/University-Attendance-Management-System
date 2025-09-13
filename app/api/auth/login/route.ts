@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SignJWT } from 'jose'
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,13 +41,19 @@ export async function POST(request: NextRequest) {
 
     console.log('Authentication successful:', user)
 
-    // 간단한 세션 데이터 (JWT 없이)
-    const sessionData = JSON.stringify({
+    // JWT 토큰 생성
+    const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+    const secret = new TextEncoder().encode(jwtSecret)
+
+    const token = await new SignJWT({
       userId: user.id,
       userType: user.type,
       name: user.name,
-      expires: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7일
     })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('7d')
+      .sign(secret)
 
     // Return success response with cookie
     const response = NextResponse.json({
@@ -58,12 +65,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // 간단한 세션 쿠키 설정
-    response.cookies.set('auth-token', encodeURIComponent(sessionData), {
+    // JWT 토큰을 쿠키로 설정
+    response.cookies.set('auth-token', token, {
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production'
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true
     })
 
     return response

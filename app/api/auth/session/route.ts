@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { jwtVerify } from 'jose'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,22 +14,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // JWT 토큰 검증
     let sessionData
     try {
-      // Decode the session data from cookie
-      sessionData = JSON.parse(decodeURIComponent(authToken))
+      const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+      const secret = new TextEncoder().encode(jwtSecret)
+      const { payload } = await jwtVerify(authToken, secret)
+      sessionData = payload as { userId: string; userType: string; name: string }
     } catch (error) {
-      console.log('Invalid session format:', error)
+      console.log('Invalid JWT token:', error)
       return NextResponse.json(
-        { error: 'Invalid session format' },
-        { status: 401 }
-      )
-    }
-
-    // Check if session is expired
-    if (Date.now() > sessionData.expires) {
-      return NextResponse.json(
-        { error: 'Session expired' },
+        { error: 'Invalid token' },
         { status: 401 }
       )
     }
