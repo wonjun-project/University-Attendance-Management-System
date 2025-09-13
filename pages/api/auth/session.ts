@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { validateSession } from '@/lib/auth-simple'
+import { validateSession } from '../../../lib/auth-simple'
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // CORS headers
