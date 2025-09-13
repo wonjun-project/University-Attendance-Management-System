@@ -49,7 +49,7 @@ export default function AttendanceDashboard() {
   const router = useRouter()
   const params = useParams()
   const { user, loading } = useAuth()
-  const sessionId = params.sessionId as string
+  const sessionId = params?.sessionId as string
 
   const [attendanceData, setAttendanceData] = useState<AttendanceStatus | null>(null)
   const [loadingData, setLoadingData] = useState(true)
