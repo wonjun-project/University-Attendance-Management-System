@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { authenticateStudent, authenticateProfessor, generateToken } from '@/lib/auth'
+import { authenticateStudent, authenticateProfessor, generateToken } from '@/lib/auth-pages'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set CORS headers
