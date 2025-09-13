@@ -32,7 +32,21 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return
     }
 
-    const session = JSON.parse(decodeURIComponent(sessionData))
+    let session
+    try {
+      // 새로운 JSON 쿠키 형태 시도
+      session = JSON.parse(decodeURIComponent(sessionData))
+    } catch (error) {
+      // JWT 토큰이거나 잘못된 형식이면 인증 실패 처리
+      console.log('Invalid session format, clearing cookie:', error.message)
+      res.setHeader('Set-Cookie', [
+        `auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${
+          process.env.NODE_ENV === 'production' ? '; Secure' : ''
+        }`
+      ])
+      res.status(401).json({ error: 'Invalid session format' })
+      return
+    }
 
     // 만료 확인
     if (Date.now() > session.expires) {
