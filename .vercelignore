@@ -11,9 +11,9 @@ test-screenshots/
 # Development files
 *.log
 *.txt
-*.js
 !next.config.js
 !tailwind.config.js
+!api/test.js
 
 # Database migrations (not needed for deployment)
 database/migrations/
