@@ -78,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Login error:', error)
     res.status(500).json({
       error: 'Internal server error',
-      details: error.message
+      details: error instanceof Error ? error.message : 'Unknown error'
     })
   }
 }

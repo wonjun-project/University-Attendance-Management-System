@@ -38,7 +38,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       session = JSON.parse(decodeURIComponent(sessionData))
     } catch (error) {
       // JWT 토큰이거나 잘못된 형식이면 인증 실패 처리
-      console.log('Invalid session format, clearing cookie:', error.message)
+      console.log('Invalid session format, clearing cookie:', error instanceof Error ? error.message : 'Unknown error')
       res.setHeader('Set-Cookie', [
         `auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${
           process.env.NODE_ENV === 'production' ? '; Secure' : ''
