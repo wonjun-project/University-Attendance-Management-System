@@ -42,21 +42,21 @@ export default function AttendanceDetailPage() {
 
   useEffect(() => {
     const fetchAttendanceDetail = async () => {
-      if (!user || user.role !== 'student' || loading || !params.id) {
+      if (!user || user.role !== 'student' || loading || !params?.id) {
         return
       }
 
       try {
         setIsLoading(true)
         // For now, we'll simulate data since we don't have the detailed API yet
-        // In a real implementation, this would fetch from `/api/attendance/student/${params.id}`
+        // In a real implementation, this would fetch from `/api/attendance/student/${params?.id}`
         
         // Simulate API call
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         // Mock data for demonstration
         const mockDetail: AttendanceDetail = {
-          id: params.id as string,
+          id: params?.id as string,
           sessionId: 'session-123',
           courseName: '컴퓨터과학개론',
           courseCode: 'CS101',
@@ -91,7 +91,7 @@ export default function AttendanceDetailPage() {
     }
 
     fetchAttendanceDetail()
-  }, [user, loading, params.id])
+  }, [user, loading, params?.id])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
