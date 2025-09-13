@@ -5,6 +5,18 @@ import { authenticateStudent, authenticateProfessor, generateToken } from '@/lib
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -12,9 +24,15 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!id || !password || !userType) {
-      return NextResponse.json({ 
-        error: 'ID, password, and user type are required' 
+      const errorResponse = NextResponse.json({
+        error: 'ID, password, and user type are required'
       }, { status: 400 })
+
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+      return errorResponse
     }
 
     let user = null
@@ -24,15 +42,27 @@ export async function POST(request: NextRequest) {
     } else if (userType === 'professor') {
       user = await authenticateProfessor(id, password)
     } else {
-      return NextResponse.json({ 
-        error: 'Invalid user type' 
+      const errorResponse = NextResponse.json({
+        error: 'Invalid user type'
       }, { status: 400 })
+
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+      return errorResponse
     }
 
     if (!user) {
-      return NextResponse.json({ 
-        error: 'Invalid credentials' 
+      const errorResponse = NextResponse.json({
+        error: 'Invalid credentials'
       }, { status: 401 })
+
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+      return errorResponse
     }
 
     // Generate token
@@ -42,7 +72,7 @@ export async function POST(request: NextRequest) {
       name: user.name
     })
 
-    const response = NextResponse.json({ 
+    const response = NextResponse.json({
       success: true,
       user: {
         id: user.id,
@@ -50,6 +80,11 @@ export async function POST(request: NextRequest) {
         type: user.type
       }
     })
+
+    // Set CORS headers
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
     // Set auth cookie
     response.cookies.set('auth-token', token, {
@@ -64,8 +99,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error' 
+    const errorResponse = NextResponse.json({
+      error: 'Internal server error'
     }, { status: 500 })
+
+    // Set CORS headers for error response
+    errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    return errorResponse
   }
 }

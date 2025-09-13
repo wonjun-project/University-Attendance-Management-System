@@ -5,17 +5,35 @@ import { getCurrentUser } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = getCurrentUser()
 
     if (!user) {
-      return NextResponse.json({ 
-        error: 'Not authenticated' 
+      const errorResponse = NextResponse.json({
+        error: 'Not authenticated'
       }, { status: 401 })
+
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      errorResponse.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+      errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+      return errorResponse
     }
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({
       success: true,
       user: {
         id: user.userId,
@@ -24,10 +42,22 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    return response
+
   } catch (error) {
     console.error('Session check error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error' 
+    const errorResponse = NextResponse.json({
+      error: 'Internal server error'
     }, { status: 500 })
+
+    errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    errorResponse.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    return errorResponse
   }
 }
