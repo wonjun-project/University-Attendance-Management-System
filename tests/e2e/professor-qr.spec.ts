@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 const BASE_URL = process.env.DEPLOY_URL || 'https://university-attendance-management-sy.vercel.app'
 
 test.describe('Professor QR generation (prod)', () => {
-  test('generates QR with predefined location', async ({ browser }) => {
+  test('generates QR with predefined location', async ({ browser }, testInfo) => {
     const context = await browser.newContext({
       permissions: ['geolocation'],
       geolocation: { latitude: 36.6291, longitude: 127.4565 },
@@ -12,17 +12,20 @@ test.describe('Professor QR generation (prod)', () => {
 
     // Login as professor
     await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded' })
+    await page.screenshot({ path: testInfo.outputPath('step1-login.png'), fullPage: true })
     await page.getByRole('button', { name: '교수' }).click()
     await page.waitForSelector('input[placeholder="PROF001"]', { timeout: 15000 })
     await page.fill('input[placeholder="PROF001"]', 'prof001')
     await page.fill('input[placeholder="비밀번호를 입력하세요"]', 'password123')
     await page.getByRole('button', { name: '로그인' }).click()
+    await page.screenshot({ path: testInfo.outputPath('step2-login-submitted.png'), fullPage: true })
 
     // Redirect to professor dashboard
     await page.waitForURL(/\/professor(\/.*)?$/, { timeout: 15000 })
 
     // Go to QR page
     await page.goto(`${BASE_URL}/professor/qr`, { waitUntil: 'domcontentloaded' })
+    await page.screenshot({ path: testInfo.outputPath('step3-qr-page.png'), fullPage: true })
     // wait a moment for location options to load (RPC or dummy fallback)
     await page.waitForTimeout(800)
 
@@ -44,15 +47,23 @@ test.describe('Professor QR generation (prod)', () => {
       return !!sel && Array.from(sel.options).some(o => o.label.includes('501'))
     })
     await selects.nth(1).selectOption({ label: '제1자연관 501호' })
+    await page.screenshot({ path: testInfo.outputPath('step4-location-selected.png'), fullPage: true })
 
     // Generate QR
     const btn = page.getByRole('button', { name: /QR코드 생성하기|생성 중/ })
     await expect(btn).toBeEnabled()
     await btn.click()
+    await page.waitForTimeout(2000)
+    await page.screenshot({ path: testInfo.outputPath('step5-after-generate-click.png'), fullPage: true })
 
     // Expect QR card to appear
-    await expect(page.getByText('출석 QR코드')).toBeVisible({ timeout: 30000 })
-    await expect(page.locator('img[alt="출석 QR코드"]')).toBeVisible()
+    // QR 성공 카드가 뜨지 않더라도 스크린샷으로 상태 확인할 수 있게 함
+    try {
+      await expect(page.getByText('출석 QR코드')).toBeVisible({ timeout: 30000 })
+      await expect(page.locator('img[alt="출석 QR코드"]')).toBeVisible()
+    } finally {
+      await page.screenshot({ path: testInfo.outputPath('step6-final.png'), fullPage: true })
+    }
 
     await context.close()
   })
