@@ -7,6 +7,11 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({
+        error: 'Server misconfiguration: Supabase URL or SERVICE_ROLE key is missing.'
+      }, { status: 500 })
+    }
     // Check authentication using JWT
     const user = getCurrentUser()
     if (!user) {
@@ -74,7 +79,7 @@ export async function POST(request: NextRequest) {
         .single()
       if (createError) {
         console.error('Create demo course error:', createError)
-        return NextResponse.json({ error: 'Failed to create demo course' }, { status: 500 })
+        return NextResponse.json({ error: `Failed to create demo course: ${createError.message}` }, { status: 500 })
       }
       course = newCourse
       
