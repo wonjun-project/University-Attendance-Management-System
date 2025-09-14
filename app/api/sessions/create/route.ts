@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// 임시 세션 저장소 (실제로는 데이터베이스 사용) - 다른 API들과 공유
-const activeSessions = global.activeSessions || (global.activeSessions = new Map())
+import { sessionStore, SessionData } from '@/lib/session-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,8 +57,8 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString()
     }
 
-    // 세션 저장
-    activeSessions.set(sessionId, session)
+    // 세션 저장 - 새로운 저장소 사용
+    sessionStore.set(sessionId, session)
 
     console.log('Created session:', session)
 

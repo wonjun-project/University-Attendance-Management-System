@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// 임시 세션 저장소 (실제로는 데이터베이스 사용) - 다른 API들과 공유
-const activeSessions = global.activeSessions || (global.activeSessions = new Map())
+import { sessionStore } from '@/lib/session-store'
 
 export async function GET(
   request: NextRequest,
@@ -17,8 +15,8 @@ export async function GET(
       )
     }
 
-    // 세션 찾기
-    const session = activeSessions.get(sessionId)
+    // 세션 찾기 - 새로운 저장소 사용
+    const session = sessionStore.get(sessionId)
 
     if (!session) {
       return NextResponse.json(

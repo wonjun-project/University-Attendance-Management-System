@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sessionStore } from '@/lib/session-store'
 
-// 임시 세션과 출석 저장소 (실제로는 데이터베이스 사용) - 다른 API들과 공유
-const activeSessions = global.activeSessions || (global.activeSessions = new Map())
+// 출석 기록 저장소 (실제로는 데이터베이스 사용)
 const attendanceRecords = global.attendanceRecords || (global.attendanceRecords = new Map())
 
 // 거리 계산 함수 (Haversine formula)
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 세션 확인
-    const session = activeSessions.get(sessionId)
+    // 세션 확인 - 새로운 저장소 사용
+    const session = sessionStore.get(sessionId)
     if (!session) {
       return NextResponse.json(
         { error: '유효하지 않은 세션입니다.' },
