@@ -52,18 +52,8 @@ export default function AttendancePage() {
         throw new Error(data.error || '세션 정보를 가져올 수 없습니다.')
       }
 
-      // QR 코드 데이터에서 세션 정보 추출
+      // 세션 정보 추출 (QR 코드는 이제 URL이므로 파싱 불필요)
       let sessionInfo = data.session
-
-      // QR 코드 데이터가 문자열로 저장되어 있다면 파싱
-      if (typeof sessionInfo.qrCode === 'string') {
-        try {
-          const qrData = JSON.parse(sessionInfo.qrCode)
-          sessionInfo.location = qrData.location
-        } catch (e) {
-          console.log('QR 코드 파싱 실패, 기본 위치 정보 사용')
-        }
-      }
 
       const sessionData: SessionData = {
         sessionId: sessionInfo.id,

@@ -53,14 +53,7 @@ export async function POST(request: NextRequest) {
       courseName: course.name,
       courseCode: course.courseCode,
       location: locationInfo,
-      qrCode: JSON.stringify({
-        sessionId: sessionId,
-        courseId: course.id,
-        courseName: course.name,
-        location: locationInfo,
-        expiresAt: expiresAt.toISOString(),
-        attendanceUrl: `/student/attendance/${sessionId}`
-      }),
+      qrCode: `https://university-attendance-management-sy.vercel.app/student/attendance/${sessionId}`,
       expiresAt: expiresAt.toISOString(),
       isActive: true,
       createdAt: new Date().toISOString()
