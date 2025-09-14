@@ -20,16 +20,24 @@ interface SessionData {
   attendanceUrl: string
 }
 
+interface AttendanceData {
+  id: string
+  status: 'present' | 'late' | 'absent' | 'left_early'
+  sessionId: string
+}
+
 export default function AttendancePage() {
   const { user, loading } = useAuth()
   const params = useParams()
   const sessionId = params.id as string
 
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
+  const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | null>(null)
   const [locationError, setLocationError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [attendanceResult, setAttendanceResult] = useState<string | null>(null)
+  const [isTracking, setIsTracking] = useState(false)
+  const [trackingStatus, setTrackingStatus] = useState<'in_range' | 'out_of_range' | 'checking'>('checking')
+  const [lastLocationUpdate, setLastLocationUpdate] = useState<Date | null>(null)
 
   useEffect(() => {
     // URL에서 QR 코드 데이터 파싱 시도
@@ -43,106 +51,150 @@ export default function AttendancePage() {
     }
   }, [sessionId])
 
+  // 컴포넌트 언마운트 시 위치 추적 정리
+  useEffect(() => {
+    return () => {
+      if (isTracking) {
+        console.log('Component unmounting, stopping location tracking')
+        setIsTracking(false)
+      }
+    }
+  }, [isTracking])
+
   const fetchSessionData = async () => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`)
-      const data = await response.json()
+      // 세션 정보 조회
+      const sessionResponse = await fetch(`/api/sessions/${sessionId}`)
+      const sessionData = await sessionResponse.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || '세션 정보를 가져올 수 없습니다.')
+      if (!sessionResponse.ok) {
+        throw new Error(sessionData.error || '세션 정보를 가져올 수 없습니다.')
       }
 
-      // 세션 정보 추출 (QR 코드는 이제 URL이므로 파싱 불필요)
-      let sessionInfo = data.session
-
-      const sessionData: SessionData = {
+      let sessionInfo = sessionData.session
+      setSessionData({
         sessionId: sessionInfo.id,
         courseId: sessionInfo.courseId,
         courseName: sessionInfo.courseName,
         location: sessionInfo.location,
         expiresAt: sessionInfo.expiresAt,
         attendanceUrl: `/student/attendance/${sessionInfo.id}`
-      }
+      })
 
-      setSessionData(sessionData)
-    } catch (error) {
-      console.error('세션 데이터 가져오기 실패:', error)
-      setLocationError(error instanceof Error ? error.message : '세션 정보를 가져올 수 없습니다.')
-    }
-  }
+      // 현재 사용자의 출석 정보 조회 (학생용 API 사용)
+      const attendanceResponse = await fetch(`/api/attendance/student-status?sessionId=${sessionId}`)
+      const attendanceData = await attendanceResponse.json()
 
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError('위치 서비스를 지원하지 않는 브라우저입니다.')
-      return
-    }
-
-    setLocationError('')
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCurrentLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
+      if (attendanceResponse.ok && attendanceData.attendance) {
+        setAttendanceData({
+          id: attendanceData.attendance.id,
+          status: attendanceData.attendance.status,
+          sessionId: sessionId
         })
-      },
-      (error) => {
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            setLocationError('위치 접근 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
-            break
-          case error.POSITION_UNAVAILABLE:
-            setLocationError('위치 정보를 가져올 수 없습니다.')
-            break
-          case error.TIMEOUT:
-            setLocationError('위치 요청 시간이 초과되었습니다.')
-            break
-          default:
-            setLocationError('위치를 가져오는 중 오류가 발생했습니다.')
+
+        // 출석 상태가 'present'면 자동으로 위치 추적 시작
+        if (attendanceData.attendance.status === 'present') {
+          startLocationTracking(attendanceData.attendance.id)
         }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000
       }
-    )
+    } catch (error) {
+      console.error('데이터 가져오기 실패:', error)
+      setLocationError(error instanceof Error ? error.message : '정보를 가져올 수 없습니다.')
+    }
   }
 
-  // 거리 계산은 서버에서 처리
+  // 지속적인 위치 추적 시작
+  const startLocationTracking = (attendanceId: string) => {
+    if (isTracking) return // 이미 추적 중이면 중복 시작 방지
 
-  const submitAttendance = async () => {
-    if (!sessionData || !currentLocation || !user) return
+    setIsTracking(true)
+    setTrackingStatus('checking')
+    console.log('Location tracking started for attendance:', attendanceId)
 
-    setIsSubmitting(true)
+    // 초기 위치 확인
+    trackLocation(attendanceId)
 
+    // 30초마다 위치 추적
+    const trackingInterval = setInterval(() => {
+      trackLocation(attendanceId)
+    }, 30000)
+
+    // 컴포넌트 언마운트 시 정리
+    return () => {
+      clearInterval(trackingInterval)
+      setIsTracking(false)
+    }
+  }
+
+  // 실제 위치 추적 및 서버 전송
+  const trackLocation = async (attendanceId: string) => {
     try {
-      const response = await fetch('/api/attendance/submit', {
+      setTrackingStatus('checking')
+
+      // 현재 위치 가져오기
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 30000
+        })
+      })
+
+      const { latitude, longitude, accuracy } = position.coords
+      setCurrentLocation({ lat: latitude, lng: longitude })
+      setLocationError('')
+
+      // 서버에 위치 전송
+      const response = await fetch('/api/location/track', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sessionId: sessionData.sessionId,
-          studentId: user.id,
-          studentName: user.name,
-          currentLocation: currentLocation
-        }),
+          attendanceId,
+          latitude,
+          longitude,
+          accuracy
+        })
       })
 
-      const data = await response.json()
+      const result = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || '출석 처리에 실패했습니다.')
+      if (response.ok) {
+        setTrackingStatus(result.locationValid ? 'in_range' : 'out_of_range')
+        setLastLocationUpdate(new Date())
+
+        if (!result.locationValid) {
+          setLocationError('⚠️ 강의실 범위를 벗어났습니다. 범위 내로 돌아오세요!')
+        } else {
+          setLocationError('')
+        }
+      } else {
+        console.error('Location tracking failed:', result.error)
+        setLocationError(`위치 추적 실패: ${result.error}`)
+      }
+    } catch (error: any) {
+      console.error('Location tracking error:', error)
+
+      if (error.code === 1) {
+        setLocationError('위치 접근 권한이 필요합니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+      } else if (error.code === 2) {
+        setLocationError('위치 정보를 가져올 수 없습니다. GPS가 켜져있는지 확인해주세요.')
+      } else if (error.code === 3) {
+        setLocationError('위치 확인 시간이 초과되었습니다.')
+      } else {
+        setLocationError('위치 추적 중 오류가 발생했습니다.')
       }
 
-      setAttendanceResult(data.message)
-
-    } catch (error) {
-      console.error('출석 제출 오류:', error)
-      setAttendanceResult(error instanceof Error ? `❌ ${error.message}` : '❌ 출석 처리 중 오류가 발생했습니다.')
-    } finally {
-      setIsSubmitting(false)
+      setTrackingStatus('out_of_range')
     }
+  }
+
+  // 추적 중지
+  const stopLocationTracking = () => {
+    setIsTracking(false)
+    setTrackingStatus('checking')
+    console.log('Location tracking stopped')
   }
 
   if (loading) {
@@ -220,66 +272,109 @@ export default function AttendancePage() {
                 </div>
               </div>
 
-              {/* 현재 위치 */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">현재 위치 확인</h3>
-                  <Button
-                    onClick={getCurrentLocation}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    위치 가져오기
-                  </Button>
-                </div>
-
-                {locationError && (
-                  <div className="bg-red-50 p-4 rounded-lg">
-                    <p className="text-red-800 text-sm">{locationError}</p>
-                  </div>
-                )}
-
-                {currentLocation && (
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <p className="text-green-800 text-sm">
-                      ✅ 위치 정보를 성공적으로 가져왔습니다.
-                    </p>
-                    <p className="text-green-700 text-xs mt-1">
-                      위도: {currentLocation.lat.toFixed(6)}, 경도: {currentLocation.lng.toFixed(6)}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* 출석 버튼 */}
-              <Button
-                onClick={submitAttendance}
-                disabled={!currentLocation || isSubmitting}
-                className="w-full"
-                loading={isSubmitting}
-              >
-                {isSubmitting ? '출석 처리 중...' : '출석 체크'}
-              </Button>
-
-              {/* 결과 */}
-              {attendanceResult && (
+              {/* 출석 상태 */}
+              {attendanceData && (
                 <div className={`p-4 rounded-lg ${
-                  attendanceResult.includes('✅')
-                    ? 'bg-green-50 text-green-800'
-                    : 'bg-red-50 text-red-800'
+                  attendanceData.status === 'present' ? 'bg-green-50' :
+                  attendanceData.status === 'late' ? 'bg-yellow-50' : 'bg-red-50'
                 }`}>
-                  <p className="text-center font-medium">{attendanceResult}</p>
+                  <h3 className={`font-semibold ${
+                    attendanceData.status === 'present' ? 'text-green-900' :
+                    attendanceData.status === 'late' ? 'text-yellow-900' : 'text-red-900'
+                  }`}>
+                    출석 상태: {
+                      attendanceData.status === 'present' ? '✅ 출석' :
+                      attendanceData.status === 'late' ? '⚠️ 지각' :
+                      attendanceData.status === 'left_early' ? '🚪 조퇴' : '❌ 결석'
+                    }
+                  </h3>
+                </div>
+              )}
+
+              {/* 실시간 위치 추적 상태 */}
+              {isTracking && (
+                <div className={`p-4 rounded-lg ${
+                  trackingStatus === 'in_range' ? 'bg-green-50' :
+                  trackingStatus === 'out_of_range' ? 'bg-red-50' : 'bg-gray-50'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className={`font-semibold ${
+                      trackingStatus === 'in_range' ? 'text-green-900' :
+                      trackingStatus === 'out_of_range' ? 'text-red-900' : 'text-gray-900'
+                    }`}>
+                      실시간 위치 추적
+                    </h3>
+                    <div className={`w-3 h-3 rounded-full ${
+                      trackingStatus === 'in_range' ? 'bg-green-500' :
+                      trackingStatus === 'out_of_range' ? 'bg-red-500' : 'bg-gray-500 animate-pulse'
+                    }`} />
+                  </div>
+
+                  <div className={`text-sm ${
+                    trackingStatus === 'in_range' ? 'text-green-800' :
+                    trackingStatus === 'out_of_range' ? 'text-red-800' : 'text-gray-800'
+                  }`}>
+                    {trackingStatus === 'in_range' && '✅ 강의실 범위 내에 있습니다'}
+                    {trackingStatus === 'out_of_range' && '⚠️ 강의실 범위를 벗어났습니다'}
+                    {trackingStatus === 'checking' && '📍 위치를 확인하는 중...'}
+
+                    {lastLocationUpdate && (
+                      <p className="text-xs mt-1 opacity-70">
+                        마지막 업데이트: {lastLocationUpdate.toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 현재 위치 정보 */}
+              {currentLocation && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-2">현재 위치</h4>
+                  <p className="text-xs text-gray-600">
+                    위도: {currentLocation.lat.toFixed(6)},
+                    경도: {currentLocation.lng.toFixed(6)}
+                  </p>
+                </div>
+              )}
+
+              {/* 에러 메시지 */}
+              {locationError && (
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <p className="text-red-800 text-sm">{locationError}</p>
+                </div>
+              )}
+
+              {/* 추적 제어 버튼 */}
+              {attendanceData && attendanceData.status === 'present' && (
+                <div className="flex space-x-2">
+                  {isTracking ? (
+                    <Button
+                      onClick={stopLocationTracking}
+                      variant="secondary"
+                      className="flex-1"
+                    >
+                      추적 중지
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => startLocationTracking(attendanceData.id)}
+                      className="flex-1"
+                    >
+                      위치 추적 시작
+                    </Button>
+                  )}
                 </div>
               )}
 
               {/* 안내 */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">출석 방법</h4>
+                <h4 className="font-medium text-gray-900 mb-2">🎯 지속적 출석 추적</h4>
                 <div className="space-y-1 text-sm text-gray-600">
-                  <p>1. &apos;위치 가져오기&apos; 버튼을 클릭하세요</p>
-                  <p>2. 브라우저에서 위치 권한을 허용해주세요</p>
-                  <p>3. 강의실 범위 내에서 &apos;출석 체크&apos; 버튼을 클릭하세요</p>
-                  <p>4. 위치가 확인되면 자동으로 출석 처리됩니다</p>
+                  <p>• QR 인증 완료 후 자동으로 위치 추적이 시작됩니다</p>
+                  <p>• 30초마다 현재 위치를 확인합니다</p>
+                  <p>• 강의실 범위를 벗어나면 알림이 표시됩니다</p>
+                  <p>• 수업 시간 동안 범위 내에 있어야 출석으로 인정됩니다</p>
                 </div>
               </div>
             </div>

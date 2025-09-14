@@ -81,7 +81,7 @@ export default function ScanPage() {
       
       // Redirect to attendance tracking page after 2 seconds
       setTimeout(() => {
-        router.push(`/student/attendance/${result.attendanceId}`)
+        router.push(`/student/attendance/${result.sessionId}`)
       }, 2000)
 
     } catch (error: any) {

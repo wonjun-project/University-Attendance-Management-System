@@ -174,9 +174,10 @@ export async function POST(request: NextRequest) {
       // 위치 로그 저장 실패는 출석에 영향을 주지 않음 (경고만)
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       attendanceId: attendance.id,
+      sessionId: sessionId, // 출석 추적 페이지에서 사용할 세션 ID
       message: 'Successfully checked in',
       locationVerified: isLocationValid,
       distance: Math.round(distance)
