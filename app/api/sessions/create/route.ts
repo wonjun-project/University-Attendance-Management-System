@@ -31,6 +31,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 강의실 위치 정보 (실제로는 데이터베이스에서 가져와야 함)
+    const locationData: Record<string, { lat: number, lng: number, address: string, radius: number }> = {
+      'course1': { lat: 37.2935, lng: 126.9740, address: '제1자연관 501호', radius: 50 }, // C언어프로그래밍
+      'course2': { lat: 37.2930, lng: 126.9745, address: '데모 강의실', radius: 30 }, // 데모 강의
+      'course3': { lat: 37.2935, lng: 126.9740, address: '제1자연관 501호', radius: 50 }, // 자료구조와 알고리즘
+      'course4': { lat: 37.2925, lng: 126.9735, address: '미설정', radius: 100 }, // 컴퓨터과학개론
+      'course5': { lat: 37.2940, lng: 126.9750, address: '컴퓨터공학관 204호', radius: 40 } // 웹 프로그래밍
+    }
+
+    const locationInfo = locationData[courseId] || { lat: 37.2930, lng: 126.9740, address: '기본 위치', radius: 50 }
+
     // 새 세션 생성
     const sessionId = `session_${Date.now()}`
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000) // 30분 후 만료
@@ -40,7 +51,15 @@ export async function POST(request: NextRequest) {
       courseId: course.id,
       courseName: course.name,
       courseCode: course.courseCode,
-      qrCode: `QR_${sessionId}`, // 실제로는 QR코드 생성 라이브러리 사용
+      location: locationInfo,
+      qrCode: JSON.stringify({
+        sessionId: sessionId,
+        courseId: course.id,
+        courseName: course.name,
+        location: locationInfo,
+        expiresAt: expiresAt.toISOString(),
+        attendanceUrl: `/student/attendance/${sessionId}`
+      }),
       expiresAt: expiresAt.toISOString(),
       isActive: true,
       createdAt: new Date().toISOString()

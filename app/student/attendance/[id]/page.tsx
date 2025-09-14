@@ -1,209 +1,173 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 
-interface AttendanceDetail {
-  id: string
+interface SessionData {
   sessionId: string
+  courseId: string
   courseName: string
-  courseCode: string
-  sessionDate: string
-  startTime?: string
-  endTime?: string
-  checkedInAt: string | null
-  status: 'present' | 'late' | 'absent'
-  locationVerified: boolean
-  studentLocation?: {
-    latitude: number
-    longitude: number
-    accuracy: number
-    timestamp: string
-  }
-  classroomLocation?: {
-    latitude: number
-    longitude: number
-    radius: number
+  location: {
+    lat: number
+    lng: number
     address: string
+    radius: number
   }
-  distance?: number
+  expiresAt: string
+  attendanceUrl: string
 }
 
-export default function AttendanceDetailPage() {
-  const router = useRouter()
-  const params = useParams()
+export default function AttendancePage() {
   const { user, loading } = useAuth()
-  const [attendanceDetail, setAttendanceDetail] = useState<AttendanceDetail | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string>('')
+  const params = useParams()
+  const sessionId = params.id as string
 
+  const [sessionData, setSessionData] = useState<SessionData | null>(null)
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | null>(null)
+  const [locationError, setLocationError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [attendanceResult, setAttendanceResult] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchAttendanceDetail = async () => {
-      if (!user || user.role !== 'student' || loading || !params?.id) {
-        return
-      }
-
+    // URL에서 QR 코드 데이터 파싱 시도
+    if (sessionId) {
       try {
-        setIsLoading(true)
-        // For now, we'll simulate data since we don't have the detailed API yet
-        // In a real implementation, this would fetch from `/api/attendance/student/${params?.id}`
-        
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        // Mock data for demonstration
-        const mockDetail: AttendanceDetail = {
-          id: params?.id as string,
-          sessionId: 'session-123',
-          courseName: '컴퓨터과학개론',
-          courseCode: 'CS101',
-          sessionDate: '2025-09-11',
-          startTime: '09:00',
-          endTime: '10:30',
-          checkedInAt: '2025-09-11T09:05:30Z',
-          status: 'present',
-          locationVerified: true,
-          studentLocation: {
-            latitude: 37.5665,
-            longitude: 126.9780,
-            accuracy: 15,
-            timestamp: '2025-09-11T09:05:25Z'
-          },
-          classroomLocation: {
-            latitude: 37.5665,
-            longitude: 126.9780,
-            radius: 50,
-            address: '공학관 201호'
-          },
-          distance: 12.5
-        }
-        
-        setAttendanceDetail(mockDetail)
-      } catch (error: any) {
-        console.error('Fetch attendance detail error:', error)
-        setError(error.message || '출석 상세 정보를 불러오는 중 오류가 발생했습니다.')
-      } finally {
-        setIsLoading(false)
+        // 실제로는 서버에서 세션 정보를 가져와야 함
+        fetchSessionData()
+      } catch (error) {
+        console.error('세션 데이터 파싱 실패:', error)
       }
     }
+  }, [sessionId])
 
-    fetchAttendanceDetail()
-  }, [user, loading, params?.id])
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'present':
-        return <Badge variant="success">출석</Badge>
-      case 'late':
-        return <Badge variant="warning">지각</Badge>
-      case 'absent':
-        return <Badge variant="error">결석</Badge>
-      default:
-        return <Badge variant="secondary">미확인</Badge>
+  const fetchSessionData = async () => {
+    // 실제 구현에서는 서버 API 호출
+    const mockData: SessionData = {
+      sessionId: sessionId,
+      courseId: 'course5',
+      courseName: '웹 프로그래밍',
+      location: {
+        lat: 37.2940,
+        lng: 126.9750,
+        address: '컴퓨터공학관 204호',
+        radius: 40
+      },
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      attendanceUrl: `/student/attendance/${sessionId}`
     }
+    setSessionData(mockData)
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'present':
-        return 'text-success-600'
-      case 'late':
-        return 'text-warning-600'
-      case 'absent':
-        return 'text-error-600'
-      default:
-        return 'text-gray-600'
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('위치 서비스를 지원하지 않는 브라우저입니다.')
+      return
     }
-  }
 
-  const formatDateTime = (dateTimeString: string) => {
-    const date = new Date(dateTimeString)
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      weekday: 'short'
-    })
-  }
-
-  const formatTime = (timeString?: string) => {
-    return timeString?.slice(0, 5) // HH:MM format
-  }
-
-  if (loading || !user || user.role !== 'student') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">로딩 중...</p>
-        </div>
-      </div>
+    setLocationError('')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        })
+      },
+      (error) => {
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('위치 접근 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+            break
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('위치 정보를 가져올 수 없습니다.')
+            break
+          case error.TIMEOUT:
+            setLocationError('위치 요청 시간이 초과되었습니다.')
+            break
+          default:
+            setLocationError('위치를 가져오는 중 오류가 발생했습니다.')
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
     )
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">출석 상세 정보를 불러오는 중...</p>
-        </div>
-      </div>
-    )
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371e3 // 지구 반지름 (미터)
+    const φ1 = (lat1 * Math.PI) / 180
+    const φ2 = (lat2 * Math.PI) / 180
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180
+    const Δλ = ((lng2 - lng1) * Math.PI) / 180
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+    return R * c // 거리 (미터)
   }
 
-  if (error || !attendanceDetail) {
+  const submitAttendance = async () => {
+    if (!sessionData || !currentLocation || !user) return
+
+    setIsSubmitting(true)
+
+    try {
+      const distance = calculateDistance(
+        currentLocation.lat,
+        currentLocation.lng,
+        sessionData.location.lat,
+        sessionData.location.lng
+      )
+
+      if (distance <= sessionData.location.radius) {
+        // 위치 기반 출석 성공
+        setAttendanceResult(`✅ 출석이 완료되었습니다! (거리: ${Math.round(distance)}m)`)
+      } else {
+        // 위치가 너무 멀어서 출석 실패
+        setAttendanceResult(`❌ 강의실에서 너무 멀리 떨어져 있습니다. (거리: ${Math.round(distance)}m, 허용범위: ${sessionData.location.radius}m)`)
+      }
+    } catch (error) {
+      setAttendanceResult('❌ 출석 처리 중 오류가 발생했습니다.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="min-h-screen bg-gray-50" />
+  }
+
+  if (!user || user.role !== 'student') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="border-b border-gray-200 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => router.back()}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <h1 className="text-xl font-semibold text-gray-900">출석 상세</h1>
-              </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-gray-600">학생 계정으로 로그인해주세요.</p>
+            <div className="mt-4 text-center">
+              <Link href="/auth/login">
+                <Button>로그인</Button>
+              </Link>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center text-error-600">
-                <svg className="mx-auto h-12 w-12 text-error-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm">{error || '출석 정보를 찾을 수 없습니다.'}</p>
-                <Button className="mt-4" onClick={() => router.back()}>
-                  돌아가기
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+  if (!sessionData) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-gray-600">세션 정보를 불러오는 중...</p>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -215,185 +179,106 @@ export default function AttendanceDetailPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.back()}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <h1 className="text-xl font-semibold text-gray-900">
-                출석 상세
-              </h1>
-              {getStatusBadge(attendanceDetail.status)}
+              <Link href="/student" className="text-gray-400 hover:text-gray-600">
+                ← 대시보드
+              </Link>
+              <h1 className="text-xl font-semibold text-gray-900">출석 체크</h1>
+              <Badge variant="primary">위치 기반</Badge>
             </div>
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">{user.name}</span>
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{user.name} 학생</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* Course Information */}
-        <Card className="mb-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>강의 정보</span>
-              <span className={`text-lg font-bold ${getStatusColor(attendanceDetail.status)}`}>
-                {attendanceDetail.status === 'present' && '✅ 출석'}
-                {attendanceDetail.status === 'late' && '⚠️ 지각'}
-                {attendanceDetail.status === 'absent' && '❌ 결석'}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-500">강의명</label>
-                <p className="text-lg font-semibold text-gray-900">{attendanceDetail.courseName}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-500">강의코드</label>
-                <p className="text-lg font-semibold text-gray-900">{attendanceDetail.courseCode}</p>
-              </div>
-            </div>
-            
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-500">수업 날짜</label>
-                <p className="font-medium text-gray-900">{formatDate(attendanceDetail.sessionDate)}</p>
-              </div>
-              {attendanceDetail.startTime && attendanceDetail.endTime && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">수업 시간</label>
-                  <p className="font-medium text-gray-900">
-                    {formatTime(attendanceDetail.startTime)} - {formatTime(attendanceDetail.endTime)}
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="text-sm font-medium text-gray-500">위치 인증</label>
-                <div className="flex items-center space-x-2">
-                  {attendanceDetail.locationVerified ? (
-                    <>
-                      <span className="text-success-600">✅</span>
-                      <span className="text-success-600 font-medium">인증됨</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-error-600">❌</span>
-                      <span className="text-error-600 font-medium">인증 실패</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Attendance Details */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>출석 세부 정보</CardTitle>
+            <CardTitle>{sessionData.courseName}</CardTitle>
+            <p className="text-sm text-gray-600">
+              세션 ID: {sessionData.sessionId}
+            </p>
           </CardHeader>
           <CardContent>
-            {attendanceDetail.checkedInAt ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">체크인 시간</label>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {formatDateTime(attendanceDetail.checkedInAt)}
-                  </p>
+            <div className="space-y-6">
+              {/* 강의실 정보 */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-blue-900">강의실 정보</h3>
+                <div className="mt-2 space-y-1 text-sm text-blue-800">
+                  <p>📍 위치: {sessionData.location.address}</p>
+                  <p>📏 출석 인정 범위: {sessionData.location.radius}m 이내</p>
                 </div>
-                
-                {attendanceDetail.studentLocation && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">체크인 위치</label>
-                    <div className="bg-gray-50 p-4 rounded-lg mt-2">
-                      <div className="grid md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium">위도:</span> {attendanceDetail.studentLocation.latitude.toFixed(6)}
-                        </div>
-                        <div>
-                          <span className="font-medium">경도:</span> {attendanceDetail.studentLocation.longitude.toFixed(6)}
-                        </div>
-                        <div>
-                          <span className="font-medium">정확도:</span> ±{attendanceDetail.studentLocation.accuracy}m
-                        </div>
-                        <div>
-                          <span className="font-medium">측정 시간:</span> {formatDateTime(attendanceDetail.studentLocation.timestamp)}
-                        </div>
-                      </div>
-                    </div>
+              </div>
+
+              {/* 현재 위치 */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">현재 위치 확인</h3>
+                  <Button
+                    onClick={getCurrentLocation}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    위치 가져오기
+                  </Button>
+                </div>
+
+                {locationError && (
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <p className="text-red-800 text-sm">{locationError}</p>
                   </div>
                 )}
 
-                {attendanceDetail.classroomLocation && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">강의실 위치</label>
-                    <div className="bg-blue-50 p-4 rounded-lg mt-2">
-                      <div className="grid md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium">주소:</span> {attendanceDetail.classroomLocation.address}
-                        </div>
-                        <div>
-                          <span className="font-medium">허용 반경:</span> {attendanceDetail.classroomLocation.radius}m
-                        </div>
-                        <div>
-                          <span className="font-medium">강의실 위도:</span> {attendanceDetail.classroomLocation.latitude.toFixed(6)}
-                        </div>
-                        <div>
-                          <span className="font-medium">강의실 경도:</span> {attendanceDetail.classroomLocation.longitude.toFixed(6)}
-                        </div>
-                      </div>
-                      
-                      {attendanceDetail.distance !== undefined && (
-                        <div className="mt-3 pt-3 border-t border-blue-200">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">실제 거리:</span>
-                            <span className={`font-bold ${
-                              attendanceDetail.distance <= attendanceDetail.classroomLocation.radius 
-                                ? 'text-success-600' 
-                                : 'text-error-600'
-                            }`}>
-                              {attendanceDetail.distance.toFixed(1)}m
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                {currentLocation && (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-green-800 text-sm">
+                      ✅ 위치 정보를 성공적으로 가져왔습니다.
+                    </p>
+                    <p className="text-green-700 text-xs mt-1">
+                      위도: {currentLocation.lat.toFixed(6)}, 경도: {currentLocation.lng.toFixed(6)}
+                    </p>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="text-center text-gray-500 py-8">
-                <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm font-medium">출석 체크를 하지 않았습니다.</p>
-                <p className="text-xs text-gray-400 mt-1">이 수업에서는 출석 체크인이 이루어지지 않았습니다.</p>
+
+              {/* 출석 버튼 */}
+              <Button
+                onClick={submitAttendance}
+                disabled={!currentLocation || isSubmitting}
+                className="w-full"
+                loading={isSubmitting}
+              >
+                {isSubmitting ? '출석 처리 중...' : '출석 체크'}
+              </Button>
+
+              {/* 결과 */}
+              {attendanceResult && (
+                <div className={`p-4 rounded-lg ${
+                  attendanceResult.includes('✅')
+                    ? 'bg-green-50 text-green-800'
+                    : 'bg-red-50 text-red-800'
+                }`}>
+                  <p className="text-center font-medium">{attendanceResult}</p>
+                </div>
+              )}
+
+              {/* 안내 */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">출석 방법</h4>
+                <div className="space-y-1 text-sm text-gray-600">
+                  <p>1. '위치 가져오기' 버튼을 클릭하세요</p>
+                  <p>2. 브라우저에서 위치 권한을 허용해주세요</p>
+                  <p>3. 강의실 범위 내에서 '출석 체크' 버튼을 클릭하세요</p>
+                  <p>4. 위치가 확인되면 자동으로 출석 처리됩니다</p>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
-
-        {/* Actions */}
-        <div className="flex gap-4">
-          <Button onClick={() => router.push('/student/attendance')} className="flex-1">
-            출석 목록으로 돌아가기
-          </Button>
-          <Button 
-            variant="secondary" 
-            onClick={() => router.push('/student')}
-            className="flex-1"
-          >
-            대시보드로 돌아가기
-          </Button>
-        </div>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
+import QRCodeDisplay from '@/components/QRCodeDisplay'
 import Link from 'next/link'
 
 interface Course {
@@ -18,6 +19,12 @@ interface QRSession {
   courseName: string
   courseCode: string
   qrCode: string
+  location?: {
+    lat: number
+    lng: number
+    address: string
+    radius: number
+  }
   expiresAt: string
   isActive: boolean
   createdAt: string
@@ -204,15 +211,15 @@ export default function QRCodePage() {
               <CardContent>
                 <div className="text-center">
                   <div className="bg-white p-8 rounded-lg shadow-inner inline-block">
-                    <div
-                      className="qr-code-container"
-                      dangerouslySetInnerHTML={{
-                        __html: `<div style="display: flex; justify-content: center; align-items: center; min-height: 200px; background: white; border: 1px solid #e5e7eb; border-radius: 8px;"><p style="color: #6b7280;">QR코드가 여기에 표시됩니다</p></div>`
-                      }}
+                    <QRCodeDisplay
+                      value={activeSession.qrCode}
+                      size={256}
                     />
-                    <p className="text-sm text-gray-600 mt-4">
-                      만료 시간: {new Date(activeSession.expiresAt).toLocaleString('ko-KR')}
-                    </p>
+                    <div className="text-sm text-gray-600 mt-4 space-y-2">
+                      <p>📍 위치: {activeSession.location?.address}</p>
+                      <p>📏 인정 범위: {activeSession.location?.radius}m</p>
+                      <p>⏰ 만료 시간: {new Date(activeSession.expiresAt).toLocaleString('ko-KR')}</p>
+                    </div>
                   </div>
                 </div>
 
