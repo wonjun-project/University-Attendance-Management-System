@@ -2,11 +2,8 @@
 backend/
 frontend/
 
-# Test files
+# Test artifacts
 test-screenshots/
-*.png
-*.jpg
-*.jpeg
 
 # Development files
 *.log
@@ -21,8 +18,7 @@ database/migrations/
 # Scripts
 scripts/
 
-# Analysis files
-*.json
+# Analysis files (do not exclude generic *.json to avoid breaking app assets)
 !package.json
 !package-lock.json
 !tsconfig.json
