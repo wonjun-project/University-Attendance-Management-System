@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// 임시 세션 저장소 (실제로는 데이터베이스 사용)
-const activeSessions = new Map()
+// 임시 세션 저장소 (실제로는 데이터베이스 사용) - 다른 API들과 공유
+const activeSessions = global.activeSessions || (global.activeSessions = new Map())
 
 export async function POST(request: NextRequest) {
   try {
-    const { courseId } = await request.json()
+    const { courseId, location } = await request.json()
 
     if (!courseId) {
       return NextResponse.json(
@@ -31,16 +31,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 강의실 위치 정보 (실제로는 데이터베이스에서 가져와야 함)
+    // 강의실 위치 정보 - 청주시 서원구 무심서로 377-3 제1자연관 501호
     const locationData: Record<string, { lat: number, lng: number, address: string, radius: number }> = {
-      'course1': { lat: 37.2935, lng: 126.9740, address: '제1자연관 501호', radius: 50 }, // C언어프로그래밍
-      'course2': { lat: 37.2930, lng: 126.9745, address: '데모 강의실', radius: 30 }, // 데모 강의
-      'course3': { lat: 37.2935, lng: 126.9740, address: '제1자연관 501호', radius: 50 }, // 자료구조와 알고리즘
-      'course4': { lat: 37.2925, lng: 126.9735, address: '미설정', radius: 100 }, // 컴퓨터과학개론
-      'course5': { lat: 37.2940, lng: 126.9750, address: '컴퓨터공학관 204호', radius: 40 } // 웹 프로그래밍
+      'course1': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // C언어프로그래밍
+      'course2': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // 데모 강의
+      'course3': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // 자료구조와 알고리즘
+      'course4': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // 컴퓨터과학개론
+      'course5': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 } // 웹 프로그래밍
     }
 
-    const locationInfo = locationData[courseId] || { lat: 37.2930, lng: 126.9740, address: '기본 위치', radius: 50 }
+    // 사용자가 설정한 위치 정보가 있으면 사용, 없으면 기본 위치 사용
+    const locationInfo = location || locationData[courseId] || { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }
 
     // 새 세션 생성
     const sessionId = `session_${Date.now()}`

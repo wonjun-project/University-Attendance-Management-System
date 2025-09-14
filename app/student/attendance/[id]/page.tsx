@@ -44,21 +44,41 @@ export default function AttendancePage() {
   }, [sessionId])
 
   const fetchSessionData = async () => {
-    // 실제 구현에서는 서버 API 호출
-    const mockData: SessionData = {
-      sessionId: sessionId,
-      courseId: 'course5',
-      courseName: '웹 프로그래밍',
-      location: {
-        lat: 37.2940,
-        lng: 126.9750,
-        address: '컴퓨터공학관 204호',
-        radius: 40
-      },
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      attendanceUrl: `/student/attendance/${sessionId}`
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '세션 정보를 가져올 수 없습니다.')
+      }
+
+      // QR 코드 데이터에서 세션 정보 추출
+      let sessionInfo = data.session
+
+      // QR 코드 데이터가 문자열로 저장되어 있다면 파싱
+      if (typeof sessionInfo.qrCode === 'string') {
+        try {
+          const qrData = JSON.parse(sessionInfo.qrCode)
+          sessionInfo.location = qrData.location
+        } catch (e) {
+          console.log('QR 코드 파싱 실패, 기본 위치 정보 사용')
+        }
+      }
+
+      const sessionData: SessionData = {
+        sessionId: sessionInfo.id,
+        courseId: sessionInfo.courseId,
+        courseName: sessionInfo.courseName,
+        location: sessionInfo.location,
+        expiresAt: sessionInfo.expiresAt,
+        attendanceUrl: `/student/attendance/${sessionInfo.id}`
+      }
+
+      setSessionData(sessionData)
+    } catch (error) {
+      console.error('세션 데이터 가져오기 실패:', error)
+      setLocationError(error instanceof Error ? error.message : '세션 정보를 가져올 수 없습니다.')
     }
-    setSessionData(mockData)
   }
 
   const getCurrentLocation = () => {
@@ -118,22 +138,30 @@ export default function AttendancePage() {
     setIsSubmitting(true)
 
     try {
-      const distance = calculateDistance(
-        currentLocation.lat,
-        currentLocation.lng,
-        sessionData.location.lat,
-        sessionData.location.lng
-      )
+      const response = await fetch('/api/attendance/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: sessionData.sessionId,
+          studentId: user.id,
+          studentName: user.name,
+          currentLocation: currentLocation
+        }),
+      })
 
-      if (distance <= sessionData.location.radius) {
-        // 위치 기반 출석 성공
-        setAttendanceResult(`✅ 출석이 완료되었습니다! (거리: ${Math.round(distance)}m)`)
-      } else {
-        // 위치가 너무 멀어서 출석 실패
-        setAttendanceResult(`❌ 강의실에서 너무 멀리 떨어져 있습니다. (거리: ${Math.round(distance)}m, 허용범위: ${sessionData.location.radius}m)`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '출석 처리에 실패했습니다.')
       }
+
+      setAttendanceResult(data.message)
+
     } catch (error) {
-      setAttendanceResult('❌ 출석 처리 중 오류가 발생했습니다.')
+      console.error('출석 제출 오류:', error)
+      setAttendanceResult(error instanceof Error ? `❌ ${error.message}` : '❌ 출석 처리 중 오류가 발생했습니다.')
     } finally {
       setIsSubmitting(false)
     }

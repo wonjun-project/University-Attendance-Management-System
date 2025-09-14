@@ -37,6 +37,14 @@ export default function QRCodePage() {
   const [activeSession, setActiveSession] = useState<QRSession | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [customLocation, setCustomLocation] = useState({
+    lat: 36.6372,
+    lng: 127.4896,
+    address: '제1자연관 501호 (무심서로 377-3)',
+    radius: 30
+  })
+  const [showLocationSettings, setShowLocationSettings] = useState(false)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -59,6 +67,49 @@ export default function QRCodePage() {
     fetchCourses()
   }, [user, loading])
 
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('위치 서비스를 지원하지 않는 브라우저입니다.')
+      return
+    }
+
+    setIsGettingLocation(true)
+    setError('')
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCustomLocation(prev => ({
+          ...prev,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          address: `현재 위치 (${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)})`
+        }))
+        setIsGettingLocation(false)
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setError('위치 접근 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+            break
+          case error.POSITION_UNAVAILABLE:
+            setError('위치 정보를 가져올 수 없습니다.')
+            break
+          case error.TIMEOUT:
+            setError('위치 요청 시간이 초과되었습니다.')
+            break
+          default:
+            setError('위치를 가져오는 중 오류가 발생했습니다.')
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    )
+  }
+
   const generateQRCode = async () => {
     if (!selectedCourse) {
       setError('강의를 선택해주세요.')
@@ -75,7 +126,8 @@ export default function QRCodePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          courseId: selectedCourse
+          courseId: selectedCourse,
+          location: customLocation
         }),
       })
 
@@ -178,6 +230,114 @@ export default function QRCodePage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* 위치 설정 */}
+                <div className="border-t pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      강의실 위치 설정
+                    </label>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowLocationSettings(!showLocationSettings)}
+                    >
+                      {showLocationSettings ? '접기' : '위치 설정'}
+                    </Button>
+                  </div>
+
+                  {showLocationSettings && (
+                    <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            위도
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={customLocation.lat}
+                            onChange={(e) => setCustomLocation(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            경도
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={customLocation.lng}
+                            onChange={(e) => setCustomLocation(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          위치 설명
+                        </label>
+                        <input
+                          type="text"
+                          value={customLocation.address}
+                          onChange={(e) => setCustomLocation(prev => ({ ...prev, address: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="예: 제1자연관 501호"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          출석 인정 반경 (미터)
+                        </label>
+                        <input
+                          type="number"
+                          value={customLocation.radius}
+                          onChange={(e) => setCustomLocation(prev => ({ ...prev, radius: parseInt(e.target.value) || 30 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          min="10"
+                          max="200"
+                        />
+                      </div>
+
+                      <div className="flex space-x-3">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={getCurrentLocation}
+                          disabled={isGettingLocation}
+                          loading={isGettingLocation}
+                        >
+                          {isGettingLocation ? '위치 가져오는 중...' : '현재 위치 가져오기'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setCustomLocation({
+                            lat: 36.6372,
+                            lng: 127.4896,
+                            address: '제1자연관 501호 (무심서로 377-3)',
+                            radius: 30
+                          })}
+                        >
+                          기본값으로 초기화
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 현재 설정된 위치 정보 */}
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-2">현재 설정된 위치</h4>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <p>📍 {customLocation.address}</p>
+                      <p>🌍 위도: {customLocation.lat.toFixed(6)}, 경도: {customLocation.lng.toFixed(6)}</p>
+                      <p>📏 출석 인정 반경: {customLocation.radius}m</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-4">
