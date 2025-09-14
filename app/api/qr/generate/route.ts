@@ -2,6 +2,9 @@ import { getCurrentUser } from '@/lib/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Ensure Node.js runtime (service role key usage)
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     // Check authentication using JWT

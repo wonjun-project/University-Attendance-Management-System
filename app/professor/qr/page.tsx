@@ -57,7 +57,16 @@ export default function QRCodePage() {
           }
         })
       })
-      const result = await response.json()
+      const raw = await response.text()
+      if (!raw) {
+        throw new Error('서버 응답이 비어 있습니다. 환경변수 및 권한 설정을 확인하세요.')
+      }
+      let result: any
+      try {
+        result = JSON.parse(raw)
+      } catch {
+        throw new Error('서버 응답을 파싱하지 못했습니다. 콘솔/함수 로그를 확인하세요.')
+      }
       if (!response.ok) throw new Error(result.error || 'QR코드 생성에 실패했습니다.')
       setQrData(result.qrData)
     } catch (e: any) {
@@ -176,4 +185,3 @@ export default function QRCodePage() {
     </div>
   )
 }
-
