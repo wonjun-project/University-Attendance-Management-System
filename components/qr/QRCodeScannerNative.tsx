@@ -18,6 +18,7 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const handlingRef = useRef(false)
   
   const [status, setStatus] = useState<ScannerStatus>('requesting_permission')
   const [error, setError] = useState<string>('')
@@ -53,7 +54,7 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
     addLog('Camera stopped successfully')
   }, [addLog])
 
-  const scanQRCode = useCallback(() => {
+  const scanQRCode = useCallback(async () => {
     const video = videoRef.current
     const canvas = canvasRef.current
     
@@ -78,6 +79,8 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
     const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
     
     if (qrCode) {
+      if (handlingRef.current) return
+      handlingRef.current = true
       const raw = qrCode.data?.trim() || ''
       addLog(`QR code detected: ${raw.substring(0, 60)}...`)
 
@@ -121,6 +124,7 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
             const msg = data?.error || '세션 정보를 가져올 수 없습니다.'
             setError(msg)
             onScanError?.(msg)
+            handlingRef.current = false
             return
           }
 
@@ -138,6 +142,7 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
           const errorMsg = 'QR코드가 만료되었습니다. 교수님께 새로운 QR코드를 요청하세요.'
           setError(errorMsg)
           onScanError?.(errorMsg)
+          handlingRef.current = false
           return
         }
 
@@ -153,6 +158,7 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
         const errorMsg = 'QR코드 처리 중 오류가 발생했습니다.'
         setError(errorMsg)
         onScanError?.(errorMsg)
+        handlingRef.current = false
       }
     }
   }, [addLog, onScanSuccess, onScanError, stopCamera])
