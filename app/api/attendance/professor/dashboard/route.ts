@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 
@@ -128,4 +131,3 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

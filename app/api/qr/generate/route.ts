@@ -1,27 +1,45 @@
-import { getCurrentUser } from '@/lib/auth'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 // Ensure Node.js runtime (service role key usage)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+function withCors(res: NextResponse) {
+  res.headers.set('Access-Control-Allow-Origin', '*')
+  res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS, GET')
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.headers.set('Cache-Control', 'no-store')
+  return res
+}
+
+export async function OPTIONS() {
+  return withCors(new NextResponse(null, { status: 204 }))
+}
+
+// Optional GET for liveness/debug checks
+export async function GET() {
+  return withCors(NextResponse.json({ ok: true, route: '/api/qr/generate', allows: ['POST'] }))
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const { getCurrentUser } = await import('@/lib/auth')
+    const { createClient } = await import('@supabase/supabase-js')
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json({
+      return withCors(NextResponse.json({
         error: 'Server misconfiguration: Supabase URL or SERVICE_ROLE key is missing.'
-      }, { status: 500 })
+      }, { status: 500 }))
     }
     // Check authentication using JWT
     const user = getCurrentUser()
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
 
     // Check if user is a professor
     if (user.userType !== 'professor') {
-      return NextResponse.json({ error: 'Only professors can generate QR codes' }, { status: 403 })
+      return withCors(NextResponse.json({ error: 'Only professors can generate QR codes' }, { status: 403 }))
     }
 
     // Create supabase client inside the function to avoid build-time errors
@@ -34,7 +52,7 @@ export async function POST(request: NextRequest) {
     const { courseId, expiresInMinutes = 30, classroomLocation } = body
 
     if (!courseId) {
-      return NextResponse.json({ error: 'Course ID is required' }, { status: 400 })
+      return withCors(NextResponse.json({ error: 'Course ID is required' }, { status: 400 }))
     }
 
     // Verify professor owns the course or create demo course
@@ -53,9 +71,9 @@ export async function POST(request: NextRequest) {
     if (!course) {
       // 교수의 실제 위치가 전달되지 않은 경우 에러 처리
       if (!classroomLocation || !classroomLocation.latitude || !classroomLocation.longitude) {
-        return NextResponse.json({ 
+        return withCors(NextResponse.json({ 
           error: '강의실 위치 정보가 필요합니다. 위치 설정을 먼저 완료해주세요.' 
-        }, { status: 400 })
+        }, { status: 400 }))
       }
 
       // Create a demo course with professor's actual location
@@ -80,7 +98,7 @@ export async function POST(request: NextRequest) {
         .single()
       if (createError) {
         console.error('Create demo course error:', createError)
-        return NextResponse.json({ error: `Failed to create demo course: ${createError.message}` }, { status: 500 })
+        return withCors(NextResponse.json({ error: `Failed to create demo course: ${createError.message}` }, { status: 500 }))
       }
       course = newCourse
       
@@ -125,7 +143,7 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error('Update session error:', updateError)
-        return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
+        return withCors(NextResponse.json({ error: 'Failed to update session' }, { status: 500 }))
       }
       session = updatedSession
     } else {
@@ -144,7 +162,7 @@ export async function POST(request: NextRequest) {
 
       if (createError) {
         console.error('Create session error:', createError)
-        return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })
+        return withCors(NextResponse.json({ error: 'Failed to create session' }, { status: 500 }))
       }
       session = newSession
     }
@@ -156,14 +174,14 @@ export async function POST(request: NextRequest) {
       type: 'attendance' as const
     }
 
-    return NextResponse.json({ 
+    return withCors(NextResponse.json({ 
       success: true, 
       qrData,
       qrCode: qrCodeValue,
       expiresAt: session.qr_code_expires_at
-    })
+    }))
   } catch (error) {
     console.error('QR generation API error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }))
   }
 }
