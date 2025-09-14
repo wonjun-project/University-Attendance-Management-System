@@ -1,262 +1,208 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
-
-// Force dynamic rendering for this route
-export const dynamic = 'force-dynamic'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    // Create supabase client inside the function to avoid build-time errors
+    const user = getCurrentUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (user.userType !== 'professor') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { searchParams } = new URL(request.url)
+    const period = searchParams.get('period') || 'month' // all|week|month
+    const filterCourseId = searchParams.get('courseId') || 'all'
+
+    const now = new Date()
+    let fromDate: Date | null = null
+    if (period === 'week') {
+      fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    } else if (period === 'month') {
+      fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-    // Get current user
-    const user = getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
-    if (user.userType !== 'professor') {
-      return NextResponse.json({ error: 'Only professors can view attendance statistics' }, { status: 403 })
-    }
-
-    // Get query parameters
-    const { searchParams } = new URL(request.url)
-    const courseId = searchParams.get('courseId')
-    const period = searchParams.get('period') || 'all' // week, month, semester, all
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-
-    // Base query for professor's courses
-    let coursesQuery = supabase
+    // 교수 강의 목록
+    const { data: courses, error: coursesErr } = await supabase
       .from('courses')
-      .select(`
-        id,
-        name,
-        course_code,
-        class_sessions!inner (
-          id,
-          date,
-          status,
-          attendances (
-            id,
-            student_id,
-            status,
-            check_in_time,
-            location_verified,
-            students (
-              student_id,
-              name
-            )
-          )
-        )
-      `)
+      .select('id,name,course_code')
       .eq('professor_id', user.userId)
+      .order('created_at', { ascending: false })
+    if (coursesErr) throw coursesErr
 
-    // Apply course filter if specified
-    if (courseId) {
-      coursesQuery = coursesQuery.eq('id', courseId)
-    }
+    let courseIds = (courses || []).map((c) => c.id)
+    if (filterCourseId !== 'all') courseIds = courseIds.filter((id) => id === filterCourseId)
 
-    // Apply date filters
-    if (startDate && endDate) {
-      coursesQuery = coursesQuery
-        .gte('class_sessions.date', startDate)
-        .lte('class_sessions.date', endDate)
-    } else if (period === 'week') {
-      const oneWeekAgo = new Date()
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-      coursesQuery = coursesQuery.gte('class_sessions.date', oneWeekAgo.toISOString().split('T')[0])
-    } else if (period === 'month') {
-      const oneMonthAgo = new Date()
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
-      coursesQuery = coursesQuery.gte('class_sessions.date', oneMonthAgo.toISOString().split('T')[0])
-    }
+    // 세션
+    const sessionQuery = supabase
+      .from('class_sessions')
+      .select('id, course_id, date, status, qr_code_expires_at')
+      .in('course_id', courseIds)
+      .order('date', { ascending: true })
+    const { data: sessions, error: sessionsErr } = fromDate
+      ? await sessionQuery.gte('date', fromDate.toISOString().slice(0, 10))
+      : await sessionQuery
+    if (sessionsErr) throw sessionsErr
 
-    const { data: courses, error: coursesError } = await coursesQuery.order('name')
+    const sessionIds = (sessions || []).map((s) => s.id)
 
-    if (coursesError) {
-      console.error('Database error:', coursesError)
-      return NextResponse.json({ error: 'Failed to fetch statistics' }, { status: 500 })
-    }
+    // 출석
+    const { data: attends } = sessionIds.length
+      ? await supabase
+          .from('attendances')
+          .select('id, session_id, student_id, status, check_in_time, location_verified')
+          .in('session_id', sessionIds)
+      : { data: [] as any[] }
 
-    // Process statistics
-    const statistics = {
-      overview: {
-        totalCourses: courses?.length || 0,
-        totalSessions: 0,
-        totalStudents: 0,
-        overallAttendanceRate: 0
-      },
-      courseStats: [] as any[],
-      studentStats: [] as any[],
-      timePatterns: {
-        byHour: [] as any[],
-        byDayOfWeek: [] as any[],
-        byDate: [] as any[]
-      },
-      trends: {
-        attendanceByDate: [] as any[],
-        attendanceRateByWeek: [] as any[]
+    // 수강신청
+    const { data: enrollments } = courseIds.length
+      ? await supabase
+          .from('course_enrollments')
+          .select('course_id, student_id')
+          .in('course_id', courseIds)
+      : { data: [] as any[] }
+
+    // 학생 이름 조회(있으면)
+    const uniqueStudentIds = Array.from(new Set((attends || []).map((a) => a.student_id)))
+    const { data: studentRows } = uniqueStudentIds.length
+      ? await supabase
+          .from('students')
+          .select('student_id, name')
+          .in('student_id', uniqueStudentIds)
+      : { data: [] as any[] }
+    const studentNameMap = new Map<string, string>((studentRows || []).map((s) => [s.student_id, s.name]))
+
+    // 개요
+    const totalCourses = filterCourseId === 'all' ? (courses?.length || 0) : 1
+    const totalSessions = sessions?.length || 0
+    const presentCnt = (attends || []).filter((a) => a.status === 'present').length
+    const lateCnt = (attends || []).filter((a) => a.status === 'late').length
+    const totalAttRows = (attends || []).length
+    const overallAttendanceRate = totalAttRows > 0 ? Math.round(((presentCnt + lateCnt) / totalAttRows) * 100) : 0
+
+    // 강의별 통계
+    const courseStats = (filterCourseId === 'all' ? courses : courses?.filter((c) => c.id === filterCourseId))?.map((c) => {
+      const sForCourse = (sessions || []).filter((s) => s.course_id === c.id)
+      const sidSet = new Set(sForCourse.map((s) => s.id))
+      const aForCourse = (attends || []).filter((a) => sidSet.has(a.session_id))
+      const present = aForCourse.filter((a) => a.status === 'present').length
+      const late = aForCourse.filter((a) => a.status === 'late').length
+      const totalRows = aForCourse.length
+      const attendanceRate = totalRows > 0 ? Math.round(((present + late) / totalRows) * 100) : 0
+      const studentsForCourse = new Set((enrollments || []).filter((e) => e.course_id === c.id).map((e) => e.student_id)).size
+      return {
+        courseId: c.id,
+        courseName: c.name,
+        courseCode: c.course_code,
+        totalSessions: sForCourse.length,
+        totalStudents: studentsForCourse,
+        totalAttendance: totalRows,
+        presentCount: present,
+        attendanceRate,
       }
+    }) || []
+
+    // 학생별 통계(상위)
+    const studentAgg = new Map<string, { present: number; late: number; absent: number }>()
+    for (const a of attends || []) {
+      const cur = studentAgg.get(a.student_id) || { present: 0, late: 0, absent: 0 }
+      if (a.status === 'present') cur.present++
+      else if (a.status === 'late') cur.late++
+      else cur.absent++
+      studentAgg.set(a.student_id, cur)
     }
+    const studentStats = Array.from(studentAgg.entries()).map(([id, v]) => {
+      const total = v.present + v.late + v.absent
+      const rate = total > 0 ? Math.round(((v.present + v.late) / total) * 100) : 0
+      return {
+        studentId: id,
+        name: studentNameMap.get(id) || id,
+        total,
+        present: v.present,
+        late: v.late,
+        absent: v.absent,
+        attendanceRate: rate,
+      }
+    }).sort((a, b) => b.attendanceRate - a.attendanceRate)
 
-    let totalAttendanceRecords = 0
-    let totalPresentRecords = 0
-    const studentAttendanceMap = new Map()
-    const hourlyAttendance = new Map()
-    const dailyAttendance = new Map()
-    const dateAttendance = new Map()
+    // 시간 패턴
+    const byHourMap = new Map<number, number>()
+    for (const a of attends || []) {
+      if (!a.check_in_time) continue
+      const h = new Date(a.check_in_time).getHours()
+      byHourMap.set(h, (byHourMap.get(h) || 0) + 1)
+    }
+    const byHour = Array.from(byHourMap.entries()).sort((a, b) => a[0] - b[0]).map(([hour, count]) => ({ hour, count }))
 
-    // Process each course
-    courses?.forEach(course => {
-      const sessions = course.class_sessions || []
-      let courseAttendanceTotal = 0
-      let coursePresentTotal = 0
-      let courseStudents = new Set()
+    const byDowMap = new Map<number, number>()
+    for (const s of sessions || []) {
+      const d = new Date(s.date + 'T00:00:00')
+      const dow = d.getDay() // 0=Sun
+      byDowMap.set(dow, (byDowMap.get(dow) || 0) + 1)
+    }
+    const days = ['일', '월', '화', '수', '목', '금', '토']
+    const byDayOfWeek = Array.from(byDowMap.entries()).sort((a, b) => a[0] - b[0]).map(([dayNumber, count]) => ({ day: days[dayNumber], dayNumber, count }))
 
-      sessions.forEach((session: any) => {
-        statistics.overview.totalSessions++
-        const attendances = session.attendances || []
-        
-        attendances.forEach((attendance: any) => {
-          courseAttendanceTotal++
-          totalAttendanceRecords++
-          courseStudents.add(attendance.student_id)
-          
-          if (attendance.status === 'present') {
-            coursePresentTotal++
-            totalPresentRecords++
-          }
-
-          // Student-level statistics
-          const studentId = attendance.student_id
-          if (!studentAttendanceMap.has(studentId)) {
-            studentAttendanceMap.set(studentId, {
-              studentId,
-              name: attendance.students?.name,
-              total: 0,
-              present: 0,
-              late: 0,
-              absent: 0
-            })
-          }
-          const studentStat = studentAttendanceMap.get(studentId)
-          studentStat.total++
-          studentStat[attendance.status]++
-
-          // Time pattern analysis
-          if (attendance.check_in_time) {
-            const checkInHour = new Date(attendance.check_in_time).getHours()
-            hourlyAttendance.set(checkInHour, (hourlyAttendance.get(checkInHour) || 0) + 1)
-          }
-
-          // Date pattern analysis
-          const sessionDate = new Date(session.date)
-          const dayOfWeek = sessionDate.getDay()
-          dailyAttendance.set(dayOfWeek, (dailyAttendance.get(dayOfWeek) || 0) + 1)
-          
-          const dateKey = session.date
-          if (!dateAttendance.has(dateKey)) {
-            dateAttendance.set(dateKey, { total: 0, present: 0 })
-          }
-          const dateEntry = dateAttendance.get(dateKey)
-          dateEntry.total++
-          if (attendance.status === 'present') {
-            dateEntry.present++
-          }
-        })
-      })
-
-      // Course statistics
-      const courseAttendanceRate = courseAttendanceTotal > 0 ? (coursePresentTotal / courseAttendanceTotal * 100) : 0
-      statistics.courseStats.push({
-        courseId: course.id,
-        courseName: course.name,
-        courseCode: course.course_code,
-        totalSessions: sessions.length,
-        totalStudents: courseStudents.size,
-        totalAttendance: courseAttendanceTotal,
-        presentCount: coursePresentTotal,
-        attendanceRate: Math.round(courseAttendanceRate * 10) / 10
-      })
-    })
-
-    // Student statistics
-    statistics.studentStats = Array.from(studentAttendanceMap.values())
-      .map(student => ({
-        ...student,
-        attendanceRate: student.total > 0 ? Math.round((student.present / student.total * 100) * 10) / 10 : 0
-      }))
-      .sort((a, b) => b.attendanceRate - a.attendanceRate)
-
-    // Time patterns
-    const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
-    statistics.timePatterns.byDayOfWeek = Array.from({ length: 7 }, (_, i) => ({
-      day: dayNames[i],
-      dayNumber: i,
-      count: dailyAttendance.get(i) || 0
-    }))
-
-    statistics.timePatterns.byHour = Array.from({ length: 24 }, (_, i) => ({
-      hour: i,
-      count: hourlyAttendance.get(i) || 0
-    }))
-
-    // Date trends
-    statistics.trends.attendanceByDate = Array.from(dateAttendance.entries())
-      .map(([date, data]) => ({
+    // 추이
+    const byDateMap = new Map<string, { total: number; presentLate: number }>()
+    for (const s of sessions || []) {
+      byDateMap.set(s.date, byDateMap.get(s.date) || { total: 0, presentLate: 0 })
+    }
+    for (const a of attends || []) {
+      const s = (sessions || []).find((x) => x.id === a.session_id)
+      if (!s) continue
+      const key = s.date
+      const cur = byDateMap.get(key) || { total: 0, presentLate: 0 }
+      cur.total += 1
+      if (a.status === 'present' || a.status === 'late') cur.presentLate += 1
+      byDateMap.set(key, cur)
+    }
+    const attendanceByDate = Array.from(byDateMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({
         date,
-        attendanceRate: data.total > 0 ? Math.round((data.present / data.total * 100) * 10) / 10 : 0,
-        totalStudents: data.total,
-        presentStudents: data.present
+        attendanceRate: v.total > 0 ? Math.round((v.presentLate / v.total) * 100) : 0,
+        totalStudents: v.total,
+        presentStudents: v.presentLate,
       }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // Overall statistics
-    statistics.overview.totalStudents = studentAttendanceMap.size
-    statistics.overview.overallAttendanceRate = totalAttendanceRecords > 0 
-      ? Math.round((totalPresentRecords / totalAttendanceRecords * 100) * 10) / 10 
-      : 0
-
-    // Weekly trends (group by week)
-    const weeklyData = new Map()
-    statistics.trends.attendanceByDate.forEach(entry => {
-      const date = new Date(entry.date)
-      const weekStart = new Date(date)
-      weekStart.setDate(date.getDate() - date.getDay()) // Start of week (Sunday)
-      const weekKey = weekStart.toISOString().split('T')[0]
-      
-      if (!weeklyData.has(weekKey)) {
-        weeklyData.set(weekKey, { total: 0, present: 0 })
-      }
-      const weekEntry = weeklyData.get(weekKey)
-      weekEntry.total += entry.totalStudents
-      weekEntry.present += entry.presentStudents
-    })
-
-    statistics.trends.attendanceRateByWeek = Array.from(weeklyData.entries())
-      .map(([weekStart, data]) => ({
+    // 주간 추이(간단 집계)
+    const weekMap = new Map<string, { total: number; presentLate: number }>()
+    for (const entry of attendanceByDate) {
+      const d = new Date(entry.date + 'T00:00:00')
+      const diff = (d.getDay() + 6) % 7 // Monday-based
+      const weekStart = new Date(d)
+      weekStart.setDate(d.getDate() - diff)
+      const key = weekStart.toISOString().slice(0, 10)
+      const cur = weekMap.get(key) || { total: 0, presentLate: 0 }
+      cur.total += entry.totalStudents
+      cur.presentLate += entry.presentStudents
+      weekMap.set(key, cur)
+    }
+    const attendanceRateByWeek = Array.from(weekMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([weekStart, v]) => ({
         weekStart,
-        attendanceRate: data.total > 0 ? Math.round((data.present / data.total * 100) * 10) / 10 : 0,
-        totalStudents: data.total,
-        presentStudents: data.present
+        attendanceRate: v.total > 0 ? Math.round((v.presentLate / v.total) * 100) : 0,
+        totalStudents: v.total,
+        presentStudents: v.presentLate,
       }))
-      .sort((a, b) => new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime())
 
-    return NextResponse.json({
-      success: true,
-      statistics,
-      period,
-      courseId
-    })
+    const statistics = {
+      overview: { totalCourses, totalSessions, totalStudents: new Set((enrollments || []).map((e) => e.student_id)).size, overallAttendanceRate },
+      courseStats,
+      studentStats,
+      timePatterns: { byHour, byDayOfWeek },
+      trends: { attendanceByDate, attendanceRateByWeek },
+    }
 
+    return NextResponse.json({ success: true, statistics })
   } catch (error: any) {
-    console.error('Get professor statistics error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error' 
-    }, { status: 500 })
+    console.error('Professor statistics API error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+

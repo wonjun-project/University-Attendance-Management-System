@@ -78,39 +78,76 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
     const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
     
     if (qrCode) {
-      addLog(`QR code detected: ${qrCode.data.substring(0, 30)}...`)
-      
+      const raw = qrCode.data?.trim() || ''
+      addLog(`QR code detected: ${raw.substring(0, 60)}...`)
+
       try {
-        // Parse and validate QR data using existing logic
-        const qrData = QRCodeGenerator.parseQRData(qrCode.data)
-        
-        if (!qrData) {
-          const errorMsg = '유효하지 않은 QR코드입니다.'
-          setError(errorMsg)
-          onScanError?.(errorMsg)
-          return
+        // 1) 우선 JSON 기반 포맷 시도
+        let parsed = QRCodeGenerator.parseQRData(raw)
+
+        // 2) JSON이 아니면 URL/텍스트 폴백 파싱
+        if (!parsed) {
+          addLog('QR is not JSON. Trying URL/text fallback...')
+
+          let sessionId: string | null = null
+          try {
+            if (raw.startsWith('http://') || raw.startsWith('https://')) {
+              const u = new URL(raw)
+              const parts = u.pathname.split('/').filter(Boolean)
+              // 예상 패턴: /student/attendance/<sessionId>
+              sessionId = parts[parts.length - 1] || null
+            } else {
+              // session_ 으로 시작하는 단순 문자열 처리
+              const match = raw.match(/session_[A-Za-z0-9_-]+/)
+              sessionId = match ? match[0] : null
+            }
+          } catch (e) {
+            // URL 파싱 실패는 무시
+          }
+
+          if (!sessionId) {
+            const errorMsg = '유효하지 않은 QR코드 형식입니다.'
+            setError(errorMsg)
+            onScanError?.(errorMsg)
+            return
+          }
+
+          // 세션 정보를 서버에서 조회하여 표준 형태로 구성
+          addLog(`Fetching session info for ${sessionId} ...`)
+          const resp = await fetch(`/api/sessions/${sessionId}`)
+          const data = await resp.json()
+
+          if (!resp.ok) {
+            const msg = data?.error || '세션 정보를 가져올 수 없습니다.'
+            setError(msg)
+            onScanError?.(msg)
+            return
+          }
+
+          const s = data.session
+          parsed = {
+            sessionId: s.id,
+            courseId: s.courseId || s.course_id || '',
+            expiresAt: s.expiresAt || s.qr_code_expires_at || new Date(Date.now() + 25 * 60 * 1000).toISOString(),
+            type: 'attendance' as const,
+          }
         }
 
-        if (QRCodeGenerator.isExpired(qrData)) {
+        // 만료 여부 확인
+        if (QRCodeGenerator.isExpired(parsed)) {
           const errorMsg = 'QR코드가 만료되었습니다. 교수님께 새로운 QR코드를 요청하세요.'
           setError(errorMsg)
           onScanError?.(errorMsg)
           return
         }
 
-        // Success - stop scanning and callback
+        // 성공 처리
         addLog('QR validation successful!')
-        
-        // Vibration feedback
-        if (navigator.vibrate) {
-          navigator.vibrate(200)
-        }
-        
-        // Stop camera and call success callback
+        if (navigator.vibrate) navigator.vibrate(200)
         stopCamera()
         setStatus('scanning')
-        onScanSuccess(qrData)
-        
+        onScanSuccess(parsed)
+
       } catch (error: any) {
         addLog(`QR processing error: ${error.message}`)
         const errorMsg = 'QR코드 처리 중 오류가 발생했습니다.'
