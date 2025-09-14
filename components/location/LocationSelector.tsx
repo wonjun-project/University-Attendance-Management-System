@@ -33,7 +33,7 @@ function LocationSelector({
   const [selectedType, setSelectedType] = useState<LocationType>(() => {
     return value?.locationType || 'predefined'
   })
-  const [radius, setRadius] = useState('30')
+  const [radius, setRadius] = useState('100')
   
   // value가 변경될 때 selectedType 동기화
   useEffect(() => {
@@ -81,7 +81,7 @@ function LocationSelector({
     console.log('🎯 Processing current location (bypassing selectedType check due to React async state)')
     
     // 적응형 반경 사용 (GPS 정확도 기반으로 자동 계산된 값)
-    const adaptiveRadius = coords.adaptiveRadius || parseInt(radius) || 30
+    const adaptiveRadius = coords.adaptiveRadius || parseInt(radius) || 100
     
     const locationData: LocationData = {
       latitude: coords.latitude,
@@ -104,7 +104,7 @@ function LocationSelector({
     if (value?.locationType === 'current') {
       const updatedLocation: LocationData = {
         ...value,
-        radius: parseInt(newRadius) || 30
+        radius: parseInt(newRadius) || 100
       }
       onChange(updatedLocation)
     }
@@ -195,9 +195,9 @@ function LocationSelector({
               <Input
                 label="출석 인정 반경 (미터)"
                 type="number"
-                min="10"
+                min="100"
                 max="500"
-                placeholder="30"
+                placeholder="100"
                 value={radius}
                 onChange={(e) => handleRadiusChange(e.target.value)}
                 disabled={disabled}

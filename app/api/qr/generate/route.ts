@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
           classroom_location: {
             latitude: classroomLocation.latitude,
             longitude: classroomLocation.longitude,
-            radius: classroomLocation.radius || 50 // 기본 50m 반경
+            radius: classroomLocation.radius || 100 // 기본 100m 반경
           },
           schedule: [{
             day_of_week: 1,

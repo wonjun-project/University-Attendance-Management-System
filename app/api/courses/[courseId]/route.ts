@@ -69,7 +69,7 @@ export async function GET(
       location: course.classroom_location?.displayName || '위치 정보 없음',
       locationLatitude: course.classroom_location?.latitude || null,
       locationLongitude: course.classroom_location?.longitude || null,
-      locationRadius: course.classroom_location?.radius || 50,
+      locationRadius: course.classroom_location?.radius || 100,
       createdAt: course.created_at,
       sessions: course.class_sessions?.map(session => ({
         id: session.id,
@@ -172,7 +172,7 @@ export async function PUT(
         classroom_location: locationLatitude && locationLongitude ? {
           latitude: locationLatitude,
           longitude: locationLongitude,
-          radius: locationRadius || 50,
+          radius: locationRadius || 100,
           displayName: location || '설정된 위치'
         } : null,
         schedule: schedule ? [{
@@ -208,7 +208,7 @@ export async function PUT(
         location: updatedCourse.classroom_location?.displayName || '설정된 위치',
         locationLatitude: updatedCourse.classroom_location?.latitude || null,
         locationLongitude: updatedCourse.classroom_location?.longitude || null,
-        locationRadius: updatedCourse.classroom_location?.radius || 50
+        locationRadius: updatedCourse.classroom_location?.radius || 100
       }
     })
 

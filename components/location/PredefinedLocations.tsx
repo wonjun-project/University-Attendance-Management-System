@@ -138,7 +138,7 @@ export default function PredefinedLocations({
             display_name: '제1자연관 501호', 
             latitude: 36.6291, 
             longitude: 127.4565, 
-            radius: 30 
+            radius: 100 
           }
         ]
       default:

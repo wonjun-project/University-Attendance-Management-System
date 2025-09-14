@@ -31,15 +31,15 @@ export async function POST(request: NextRequest) {
 
     // 강의실 위치 정보 - 청주시 서원구 무심서로 377-3 제1자연관 501호
     const locationData: Record<string, { lat: number, lng: number, address: string, radius: number }> = {
-      'course1': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // C언어프로그래밍
-      'course2': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // 데모 강의
-      'course3': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // 자료구조와 알고리즘
-      'course4': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }, // 컴퓨터과학개론
-      'course5': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 } // 웹 프로그래밍
+      'course1': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // C언어프로그래밍
+      'course2': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // 데모 강의
+      'course3': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // 자료구조와 알고리즘
+      'course4': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // 컴퓨터과학개론
+      'course5': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 } // 웹 프로그래밍
     }
 
     // 사용자가 설정한 위치 정보가 있으면 사용, 없으면 기본 위치 사용
-    const locationInfo = location || locationData[courseId] || { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 30 }
+    const locationInfo = location || locationData[courseId] || { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }
 
     // 새 세션 생성
     const sessionId = `session_${Date.now()}`
