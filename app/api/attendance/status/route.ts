@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const supabase = createClient()
 
     // JWT 기반 인증 확인
-    const session = getCurrentUser()
+    const session = await getCurrentUser()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

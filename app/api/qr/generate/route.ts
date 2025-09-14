@@ -24,15 +24,32 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { getCurrentUser } = await import('@/lib/auth')
+    const { getCurrentUserFromRequest } = await import('@/lib/auth')
     const { createClient } = await import('@supabase/supabase-js')
+
+    console.log('QR generation API called')
+
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('Missing environment variables:', {
+        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+      })
       return withCors(NextResponse.json({
         error: 'Server misconfiguration: Supabase URL or SERVICE_ROLE key is missing.'
       }, { status: 500 }))
     }
-    // Check authentication using JWT
-    const user = getCurrentUser()
+
+    if (!process.env.JWT_SECRET) {
+      console.error('Missing JWT_SECRET environment variable')
+      return withCors(NextResponse.json({
+        error: 'Server misconfiguration: JWT_SECRET is missing.'
+      }, { status: 500 }))
+    }
+
+    // Check authentication using JWT from request
+    const user = await getCurrentUserFromRequest(request)
+    console.log('User authentication result:', user ? { userId: user.userId, userType: user.userType } : 'No user')
+
     if (!user) {
       return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
@@ -182,6 +199,15 @@ export async function POST(request: NextRequest) {
     }))
   } catch (error) {
     console.error('QR generation API error:', error)
-    return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }))
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error)
+    })
+
+    return withCors(NextResponse.json({
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 }))
   }
 }

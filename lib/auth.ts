@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
+import { jwtVerify, SignJWT } from 'jose'
 import { cookies } from 'next/headers'
 import { createClient } from './supabase-server'
 
@@ -18,6 +18,7 @@ export interface SessionData {
   userId: string
   userType: 'student' | 'professor'
   name: string
+  [key: string]: any // Make it compatible with JWTPayload
 }
 
 // Password hashing
@@ -30,16 +31,21 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 // JWT Token functions
-export function generateToken(payload: SessionData): string {
-  return jwt.sign(payload, JWT_SECRET, { 
-    expiresIn: '7d',
-    issuer: 'attendance-app'
-  })
+export async function generateToken(payload: SessionData): Promise<string> {
+  const secret = new TextEncoder().encode(JWT_SECRET)
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .setIssuer('attendance-app')
+    .sign(secret)
 }
 
-export function verifyToken(token: string): SessionData | null {
+export async function verifyToken(token: string): Promise<SessionData | null> {
   try {
-    return jwt.verify(token, JWT_SECRET) as SessionData
+    const secret = new TextEncoder().encode(JWT_SECRET)
+    const { payload } = await jwtVerify(token, secret)
+    return payload as unknown as SessionData
   } catch (error) {
     return null
   }
@@ -72,10 +78,53 @@ export function clearAuthCookie() {
 }
 
 // Get current user from token
-export function getCurrentUser(): SessionData | null {
+export async function getCurrentUser(): Promise<SessionData | null> {
   const token = getAuthToken()
   if (!token) return null
-  return verifyToken(token)
+  return await verifyToken(token)
+}
+
+// Get current user from API request (for API routes)
+export async function getCurrentUserFromRequest(request: Request): Promise<SessionData | null> {
+  try {
+    console.log('getCurrentUserFromRequest called')
+
+    // Extract token from cookies in the request
+    const cookieHeader = request.headers.get('cookie')
+    console.log('Cookie header:', cookieHeader)
+
+    if (!cookieHeader) {
+      console.log('No cookie header found')
+      return null
+    }
+
+    // Parse cookies manually - more robust parsing
+    const cookies: Record<string, string> = {}
+    cookieHeader.split(';').forEach(cookie => {
+      const [name, ...rest] = cookie.trim().split('=')
+      if (name && rest.length > 0) {
+        cookies[name] = rest.join('=') // Handle cases where value contains '='
+      }
+    })
+
+    console.log('Parsed cookies:', Object.keys(cookies))
+
+    const token = cookies['auth-token']
+    if (!token) {
+      console.log('No auth-token cookie found')
+      return null
+    }
+
+    console.log('Token found, verifying...')
+    const result = await verifyToken(token)
+    console.log('Token verification result:', result ? { userId: result.userId, userType: result.userType } : 'null')
+
+    return result
+  } catch (error) {
+    console.error('getCurrentUserFromRequest error:', error)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack')
+    return null
+  }
 }
 
 // Database operations

@@ -9,7 +9,7 @@ type Course = { id: string; name: string; course_code: string }
 
 export async function GET(_request: NextRequest) {
   try {
-    const user = getCurrentUser()
+    const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (user.userType !== 'professor') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
