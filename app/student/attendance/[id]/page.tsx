@@ -38,6 +38,7 @@ export default function AttendancePage() {
   const [isTracking, setIsTracking] = useState(false)
   const [trackingStatus, setTrackingStatus] = useState<'in_range' | 'out_of_range' | 'checking'>('checking')
   const [lastLocationUpdate, setLastLocationUpdate] = useState<Date | null>(null)
+  const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     // URL에서 QR 코드 데이터 파싱 시도
@@ -54,12 +55,14 @@ export default function AttendancePage() {
   // 컴포넌트 언마운트 시 위치 추적 정리
   useEffect(() => {
     return () => {
-      if (isTracking) {
-        console.log('Component unmounting, stopping location tracking')
+      if (trackingInterval) {
+        console.log('Component unmounting, clearing location tracking interval')
+        clearInterval(trackingInterval)
+        setTrackingInterval(null)
         setIsTracking(false)
       }
     }
-  }, [isTracking])
+  }, [trackingInterval])
 
   const fetchSessionData = async () => {
     try {
@@ -105,7 +108,10 @@ export default function AttendancePage() {
 
   // 지속적인 위치 추적 시작
   const startLocationTracking = (attendanceId: string) => {
-    if (isTracking) return // 이미 추적 중이면 중복 시작 방지
+    if (isTracking || trackingInterval) {
+      console.log('Location tracking already active, skipping...')
+      return // 이미 추적 중이면 중복 시작 방지
+    }
 
     setIsTracking(true)
     setTrackingStatus('checking')
@@ -115,15 +121,12 @@ export default function AttendancePage() {
     trackLocation(attendanceId)
 
     // 30초마다 위치 추적
-    const trackingInterval = setInterval(() => {
+    const interval = setInterval(() => {
       trackLocation(attendanceId)
     }, 30000)
 
-    // 컴포넌트 언마운트 시 정리
-    return () => {
-      clearInterval(trackingInterval)
-      setIsTracking(false)
-    }
+    setTrackingInterval(interval)
+    console.log('Location tracking interval set:', interval)
   }
 
   // 실제 위치 추적 및 서버 전송
@@ -159,15 +162,21 @@ export default function AttendancePage() {
       })
 
       const result = await response.json()
+      console.log('Location tracking response:', result)
 
       if (response.ok) {
         setTrackingStatus(result.locationValid ? 'in_range' : 'out_of_range')
         setLastLocationUpdate(new Date())
 
         if (!result.locationValid) {
-          setLocationError('⚠️ 강의실 범위를 벗어났습니다. 범위 내로 돌아오세요!')
+          const distance = result.distance ? `${result.distance}m` : '범위 외'
+          const radius = result.allowedRadius ? `${result.allowedRadius}m` : '설정된 범위'
+          setLocationError(`⚠️ 강의실 범위를 벗어났습니다! (현재: ${distance}, 허용: ${radius})`)
         } else {
-          setLocationError('')
+          const distance = result.distance ? `${result.distance}m` : '범위 내'
+          setLocationError(`✅ 강의실 범위 내 (거리: ${distance})`)
+          // 성공시에도 잠시 메시지를 보여주고 나서 지우기
+          setTimeout(() => setLocationError(''), 3000)
         }
       } else {
         console.error('Location tracking failed:', result.error)
@@ -192,6 +201,14 @@ export default function AttendancePage() {
 
   // 추적 중지
   const stopLocationTracking = () => {
+    console.log('Stopping location tracking...')
+
+    if (trackingInterval) {
+      clearInterval(trackingInterval)
+      setTrackingInterval(null)
+      console.log('Location tracking interval cleared')
+    }
+
     setIsTracking(false)
     setTrackingStatus('checking')
     console.log('Location tracking stopped')
