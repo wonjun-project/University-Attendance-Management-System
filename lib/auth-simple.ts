@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import { createClient } from './supabase-server'
 
 // 매우 간단한 인증 (JWT 없음)
