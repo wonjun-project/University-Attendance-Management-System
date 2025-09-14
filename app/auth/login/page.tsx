@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Input } from '@/compo
 import { useAuth } from '@/lib/auth-context'
 
 export default function LoginPage() {
-  const router = useRouter()
+  // const router = useRouter() // 사용하지 않아서 주석 처리
   const { refreshUser } = useAuth()
   const [formData, setFormData] = useState({
     email: '',

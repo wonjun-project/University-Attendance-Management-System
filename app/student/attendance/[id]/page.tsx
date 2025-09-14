@@ -118,19 +118,7 @@ export default function AttendancePage() {
     )
   }
 
-  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const R = 6371e3 // 지구 반지름 (미터)
-    const φ1 = (lat1 * Math.PI) / 180
-    const φ2 = (lat2 * Math.PI) / 180
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180
-    const Δλ = ((lng2 - lng1) * Math.PI) / 180
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
-    return R * c // 거리 (미터)
-  }
+  // 거리 계산은 서버에서 처리
 
   const submitAttendance = async () => {
     if (!sessionData || !currentLocation || !user) return
@@ -298,9 +286,9 @@ export default function AttendancePage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium text-gray-900 mb-2">출석 방법</h4>
                 <div className="space-y-1 text-sm text-gray-600">
-                  <p>1. '위치 가져오기' 버튼을 클릭하세요</p>
+                  <p>1. &apos;위치 가져오기&apos; 버튼을 클릭하세요</p>
                   <p>2. 브라우저에서 위치 권한을 허용해주세요</p>
-                  <p>3. 강의실 범위 내에서 '출석 체크' 버튼을 클릭하세요</p>
+                  <p>3. 강의실 범위 내에서 &apos;출석 체크&apos; 버튼을 클릭하세요</p>
                   <p>4. 위치가 확인되면 자동으로 출석 처리됩니다</p>
                 </div>
               </div>

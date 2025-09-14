@@ -414,7 +414,7 @@ export default function QRCodePage() {
                   </div>
                   <div className="flex items-start space-x-2">
                     <span className="text-primary-600 font-semibold">4.</span>
-                    <p>수업이 끝나면 '세션 종료' 버튼을 클릭해주세요.</p>
+                    <p>수업이 끝나면 &apos;세션 종료&apos; 버튼을 클릭해주세요.</p>
                   </div>
                 </div>
               </CardContent>
