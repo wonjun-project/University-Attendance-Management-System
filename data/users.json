@@ -1,0 +1,48 @@
+{
+  "students": {
+    "123456789": {
+      "id": "123456789",
+      "name": "ddd",
+      "password": "123456789",
+      "type": "student"
+    },
+    "202400001": {
+      "id": "202400001",
+      "name": "새학생",
+      "password": "test1234",
+      "type": "student"
+    },
+    "234567890": {
+      "id": "234567890",
+      "name": "ffff",
+      "password": "234567890",
+      "type": "student"
+    },
+    "stu001": {
+      "id": "stu001",
+      "name": "테스트 학생",
+      "password": "password123",
+      "type": "student"
+    }
+  },
+  "professors": {
+    "prof001": {
+      "id": "prof001",
+      "name": "테스트 교수",
+      "password": "password123",
+      "type": "professor"
+    },
+    "PROF002": {
+      "id": "PROF002",
+      "name": "새교수",
+      "password": "test1234",
+      "type": "professor"
+    },
+    "xptmxm3": {
+      "id": "xptmxm3",
+      "name": "테스트3",
+      "password": "xptmxm3",
+      "type": "professor"
+    }
+  }
+}

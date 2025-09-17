@@ -1,0 +1,36 @@
+[
+  {
+    "id": "session_1758113625727_8tmeg0h6n",
+    "courseId": "demo-course-xptmxm3",
+    "courseName": "데모 강의",
+    "courseCode": "DEMO101",
+    "date": "2025-09-17",
+    "qrCode": "session_1758113625727_8tmeg0h6n_demo-course-xptmxm3",
+    "qrCodeExpiresAt": "2025-09-17T13:23:45.727Z",
+    "status": "active",
+    "classroomLocation": {
+      "latitude": 36.6291,
+      "longitude": 127.4565,
+      "radius": 100
+    },
+    "createdAt": "2025-09-17T12:53:45.727Z",
+    "updatedAt": "2025-09-17T12:53:45.727Z"
+  },
+  {
+    "id": "session_1758116229423_s0uytlvnp",
+    "courseId": "demo-course-prof001",
+    "courseName": "데모 강의",
+    "courseCode": "DEMO101",
+    "date": "2025-09-17",
+    "qrCode": "session_1758116259927_u7dyvjb1c_demo-course-prof001",
+    "qrCodeExpiresAt": "2025-09-17T14:07:39.927Z",
+    "status": "active",
+    "classroomLocation": {
+      "latitude": 36.6291,
+      "longitude": 127.4565,
+      "radius": 100
+    },
+    "createdAt": "2025-09-17T13:37:09.423Z",
+    "updatedAt": "2025-09-17T13:37:39.927Z"
+  }
+]

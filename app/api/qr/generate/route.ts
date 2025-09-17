@@ -1,9 +1,95 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { jwtVerify } from 'jose'
+import * as fs from 'fs'
+import * as path from 'path'
 
 // Ensure Node.js runtime (service role key usage)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+// 세션 데이터 파일 경로
+const SESSIONS_FILE = path.join(process.cwd(), 'data', 'sessions.json')
+const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
+
+// 세션 데이터를 파일에서 읽어오기
+function getSessions() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const data = fs.readFileSync(SESSIONS_FILE, 'utf-8')
+      return JSON.parse(data)
+    }
+  } catch (error) {
+    console.error('세션 데이터 읽기 실패:', error)
+  }
+  return []
+}
+
+// 세션 데이터를 파일에 저장하기
+function saveSessions(sessions: any[]) {
+  try {
+    const dir = path.dirname(SESSIONS_FILE)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2))
+    return true
+  } catch (error) {
+    console.error('세션 데이터 저장 실패:', error)
+    return false
+  }
+}
+
+// 강의 데이터를 파일에서 읽어오기
+function getCourses() {
+  try {
+    if (fs.existsSync(COURSES_FILE)) {
+      const data = fs.readFileSync(COURSES_FILE, 'utf-8')
+      return JSON.parse(data)
+    }
+  } catch (error) {
+    console.error('강의 데이터 읽기 실패:', error)
+  }
+  return []
+}
+
+// 강의 데이터를 파일에 저장하기
+function saveCourses(courses: any[]) {
+  try {
+    const dir = path.dirname(COURSES_FILE)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2))
+    return true
+  } catch (error) {
+    console.error('강의 데이터 저장 실패:', error)
+    return false
+  }
+}
+
+// JWT에서 사용자 정보 추출
+async function getCurrentUserFromRequest(request: NextRequest) {
+  const authToken = request.cookies.get('auth-token')?.value
+
+  if (!authToken) {
+    return null
+  }
+
+  const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+  const secret = new TextEncoder().encode(jwtSecret)
+
+  try {
+    const { payload } = await jwtVerify(authToken, secret)
+    return {
+      userId: payload.userId as string,
+      userType: payload.userType as string,
+      name: payload.name as string
+    }
+  } catch (error) {
+    return null
+  }
+}
 
 function withCors(res: NextResponse) {
   res.headers.set('Access-Control-Allow-Origin', '*')
@@ -24,27 +110,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { getCurrentUserFromRequest } = await import('@/lib/auth')
-    const { createClient } = await import('@supabase/supabase-js')
-
     console.log('QR generation API called')
-
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('Missing environment variables:', {
-        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
-      })
-      return withCors(NextResponse.json({
-        error: 'Server misconfiguration: Supabase URL or SERVICE_ROLE key is missing.'
-      }, { status: 500 }))
-    }
-
-    if (!process.env.JWT_SECRET) {
-      console.error('Missing JWT_SECRET environment variable')
-      return withCors(NextResponse.json({
-        error: 'Server misconfiguration: JWT_SECRET is missing.'
-      }, { status: 500 }))
-    }
 
     // Check authentication using JWT from request
     const user = await getCurrentUserFromRequest(request)
@@ -59,12 +125,6 @@ export async function POST(request: NextRequest) {
       return withCors(NextResponse.json({ error: 'Only professors can generate QR codes' }, { status: 403 }))
     }
 
-    // Create supabase client inside the function to avoid build-time errors
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
     const body = await request.json()
     const { courseId, expiresInMinutes = 30, classroomLocation } = body
 
@@ -72,130 +132,101 @@ export async function POST(request: NextRequest) {
       return withCors(NextResponse.json({ error: 'Course ID is required' }, { status: 400 }))
     }
 
-    // Verify professor owns the course or create demo course
-    let course
-    if (courseId) {
-      const { data: existingCourse } = await supabase
-        .from('courses')
-        .select('id')
-        .eq('id', courseId)
-        .eq('professor_id', user.userId) // 새 스키마에서는 professor_id가 TEXT
-        .single()
-      if (existingCourse) {
-        course = existingCourse
-      }
-    }
+    // 강의 데이터 확인 또는 생성
+    let courses = getCourses()
+    let course = courses.find(c => c.id === courseId && c.professorId === user.userId)
+
     if (!course) {
       // 교수의 실제 위치가 전달되지 않은 경우 에러 처리
       if (!classroomLocation || !classroomLocation.latitude || !classroomLocation.longitude) {
-        return withCors(NextResponse.json({ 
-          error: '강의실 위치 정보가 필요합니다. 위치 설정을 먼저 완료해주세요.' 
+        return withCors(NextResponse.json({
+          error: '강의실 위치 정보가 필요합니다. 위치 설정을 먼저 완료해주세요.'
         }, { status: 400 }))
       }
 
-      // Create a demo course with professor's actual location
-      const { data: newCourse, error: createError } = await supabase
-        .from('courses')
-        .insert({
-          professor_id: user.userId,
-          name: '데모 강의',
-          course_code: 'DEMO101',
-          classroom_location: {
-            latitude: classroomLocation.latitude,
-            longitude: classroomLocation.longitude,
-            radius: classroomLocation.radius || 100 // 기본 100m 반경
-          },
-          schedule: [{
-            day_of_week: 1,
-            start_time: '09:00',
-            end_time: '10:30'
-          }]
-        })
-        .select('id')
-        .single()
-      if (createError) {
-        console.error('Create demo course error:', createError)
-        return withCors(NextResponse.json({ error: `Failed to create demo course: ${createError.message}` }, { status: 500 }))
+      // 데모 강의 생성
+      const newCourse = {
+        id: courseId || `demo_${Date.now()}`,
+        professorId: user.userId,
+        name: '데모 강의',
+        courseCode: 'DEMO101',
+        description: '테스트용 강의입니다',
+        location: `위도: ${classroomLocation.latitude}, 경도: ${classroomLocation.longitude}`,
+        classroomLocation: {
+          latitude: classroomLocation.latitude,
+          longitude: classroomLocation.longitude,
+          radius: classroomLocation.radius || 100
+        },
+        totalSessions: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
+
+      courses.push(newCourse)
+      saveCourses(courses)
       course = newCourse
-      
-      // 데모 학생을 데모 코스에 자동 등록
-      if (user.userType === 'professor') {
-        // 현재 사용자가 학생이라면 자동 등록 (테스트용)
-        // 실제로는 별도 API를 통해 관리해야 하지만, MVP에서는 자동 등록
-        console.log('Demo course created, ID:', course.id)
-      }
+
+      console.log('Demo course created, ID:', course.id)
     }
 
-    // Use the actual course ID (either existing or newly created)
+    // 실제 course ID 사용
     const actualCourseId = course.id
-    
-    // Generate QR code manually (temporary solution)
+
+    // QR 코드 생성
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const qrCodeValue = `${sessionId}_${actualCourseId}`
     const expiresAt = new Date(Date.now() + (expiresInMinutes * 60 * 1000))
     const today = new Date().toISOString().split('T')[0]
 
-    // Create or find today's session
-    let session
-    const { data: existingSession } = await supabase
-      .from('class_sessions')
-      .select('*')
-      .eq('course_id', actualCourseId)
-      .eq('date', today)
-      .single()
+    // 세션 데이터 읽기
+    let sessions = getSessions()
 
-    if (existingSession) {
-      // Update existing session with new QR code
-      const { data: updatedSession, error: updateError } = await supabase
-        .from('class_sessions')
-        .update({
-          qr_code: qrCodeValue,
-          qr_code_expires_at: expiresAt.toISOString(),
-          status: 'active'
-        })
-        .eq('id', existingSession.id)
-        .select()
-        .single()
+    // 오늘 날짜의 기존 세션 찾기
+    let session = sessions.find(s =>
+      s.courseId === actualCourseId &&
+      s.date === today
+    )
 
-      if (updateError) {
-        console.error('Update session error:', updateError)
-        return withCors(NextResponse.json({ error: 'Failed to update session' }, { status: 500 }))
-      }
-      session = updatedSession
+    if (session) {
+      // 기존 세션 업데이트
+      session.qrCode = qrCodeValue
+      session.qrCodeExpiresAt = expiresAt.toISOString()
+      session.status = 'active'
+      session.updatedAt = new Date().toISOString()
     } else {
-      // Create new session
-      const { data: newSession, error: createError } = await supabase
-        .from('class_sessions')
-        .insert({
-          course_id: actualCourseId,
-          date: today,
-          qr_code: qrCodeValue,
-          qr_code_expires_at: expiresAt.toISOString(),
-          status: 'active'
-        })
-        .select()
-        .single()
-
-      if (createError) {
-        console.error('Create session error:', createError)
-        return withCors(NextResponse.json({ error: 'Failed to create session' }, { status: 500 }))
+      // 새 세션 생성
+      session = {
+        id: sessionId,
+        courseId: actualCourseId,
+        courseName: course.name,
+        courseCode: course.courseCode,
+        date: today,
+        qrCode: qrCodeValue,
+        qrCodeExpiresAt: expiresAt.toISOString(),
+        status: 'active',
+        classroomLocation: course.classroomLocation || classroomLocation,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
-      session = newSession
+      sessions.push(session)
     }
+
+    // 세션 저장
+    saveSessions(sessions)
+    console.log('Session saved:', session)
 
     const qrData = {
       sessionId: session.id,
       courseId: actualCourseId,
-      expiresAt: session.qr_code_expires_at,
+      expiresAt: session.qrCodeExpiresAt,
       type: 'attendance' as const
     }
 
-    return withCors(NextResponse.json({ 
-      success: true, 
+    return withCors(NextResponse.json({
+      success: true,
       qrData,
       qrCode: qrCodeValue,
-      expiresAt: session.qr_code_expires_at
+      expiresAt: session.qrCodeExpiresAt
     }))
   } catch (error) {
     console.error('QR generation API error:', error)

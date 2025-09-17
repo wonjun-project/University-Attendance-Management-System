@@ -1,0 +1,14 @@
+[
+  {
+    "id": "attendance_1758115082783_s7yjytjqw",
+    "sessionId": "session_1758113625727_8tmeg0h6n",
+    "studentId": "stu001",
+    "status": "present",
+    "checkInTime": "2025-09-17T13:18:02.783Z",
+    "locationVerified": true,
+    "distance": 0,
+    "latitude": 36.6291,
+    "longitude": 127.4565,
+    "accuracy": 10
+  }
+]

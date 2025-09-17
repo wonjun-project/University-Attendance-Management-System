@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { promises as fs } from 'fs'
+import path from 'path'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,44 +19,23 @@ export async function GET(
       )
     }
 
-    // Create supabase client
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    console.log('Fetching session from file:', sessionId)
 
-    console.log('Fetching session from database:', sessionId)
+    // 파일에서 세션 데이터 읽기
+    const dataDir = path.join(process.cwd(), 'data')
+    const sessionsPath = path.join(dataDir, 'sessions.json')
+    const coursesPath = path.join(dataDir, 'courses.json')
 
-    // 데이터베이스에서 세션 조회 (courses와 조인)
-    const { data: session, error } = await supabase
-      .from('class_sessions')
-      .select(`
-        id,
-        course_id,
-        date,
-        qr_code,
-        qr_code_expires_at,
-        status,
-        courses (
-          id,
-          name,
-          course_code,
-          classroom_location
-        )
-      `)
-      .eq('id', sessionId)
-      .single()
+    const [sessionsData, coursesData] = await Promise.all([
+      fs.readFile(sessionsPath, 'utf-8'),
+      fs.readFile(coursesPath, 'utf-8')
+    ])
 
-    if (error) {
-      console.error('Database error:', error)
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: '세션을 찾을 수 없습니다.' },
-          { status: 404 }
-        )
-      }
-      throw error
-    }
+    const sessions = JSON.parse(sessionsData)
+    const courses = JSON.parse(coursesData)
+
+    // 세션 찾기
+    const session = sessions.find((s: any) => s.id === sessionId)
 
     if (!session) {
       return NextResponse.json(
@@ -65,15 +45,16 @@ export async function GET(
     }
 
     // 세션 만료 확인
-    if (new Date() > new Date(session.qr_code_expires_at)) {
+    if (new Date() > new Date(session.qrCodeExpiresAt)) {
       return NextResponse.json(
         { error: '만료된 세션입니다.' },
         { status: 410 }
       )
     }
 
-    // 강의 정보 확인
-    const course = Array.isArray(session.courses) ? session.courses[0] : session.courses
+    // 강의 정보 찾기
+    const course = courses.find((c: any) => c.id === session.courseId)
+
     if (!course) {
       return NextResponse.json(
         { error: '강의 정보를 찾을 수 없습니다.' },
@@ -81,29 +62,32 @@ export async function GET(
       )
     }
 
-    // 응답 데이터 구성
+    // 응답 데이터 구성 (QRCodeScannerNative 컴포넌트가 기대하는 형식)
     const responseData = {
-      id: session.id,
-      courseId: course.id,
-      courseName: course.name,
-      courseCode: course.course_code,
-      location: {
-        lat: course.classroom_location?.latitude || 0,
-        lng: course.classroom_location?.longitude || 0,
-        address: course.classroom_location?.displayName || '위치 정보 없음',
-        radius: course.classroom_location?.radius || 100
-      },
-      expiresAt: session.qr_code_expires_at,
-      isActive: session.status === 'active',
-      date: session.date
+      session: {
+        id: session.id,
+        courseId: session.courseId || course.id,
+        course_id: session.courseId || course.id, // 레거시 호환성
+        courseName: session.courseName || course.name,
+        courseCode: session.courseCode || course.courseCode,
+        qr_code_expires_at: session.qrCodeExpiresAt, // 레거시 호환성
+        expiresAt: session.qrCodeExpiresAt,
+        status: session.status,
+        date: session.date,
+        classroomLocation: session.classroomLocation,
+        location: {
+          lat: session.classroomLocation?.latitude || 0,
+          lng: session.classroomLocation?.longitude || 0,
+          address: course.location || '위치 정보 없음',
+          radius: session.classroomLocation?.radius || 100
+        },
+        isActive: session.status === 'active'
+      }
     }
 
-    console.log('Session found and returned:', responseData.id)
+    console.log('Session found and returned:', responseData.session.id)
 
-    return NextResponse.json({
-      success: true,
-      session: responseData
-    })
+    return NextResponse.json(responseData)
 
   } catch (error) {
     console.error('Session retrieval error:', error)

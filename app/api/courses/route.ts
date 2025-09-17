@@ -1,7 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
+import * as fs from 'fs'
+import * as path from 'path'
+import { jwtVerify } from 'jose'
 
-// 테스트용 강의 데이터 (데이터베이스 없이)
-const DEMO_COURSES = [
+// 강의 데이터 파일 경로
+const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
+
+// 강의 데이터를 파일에서 읽어오기
+function getCourses() {
+  try {
+    if (fs.existsSync(COURSES_FILE)) {
+      const data = fs.readFileSync(COURSES_FILE, 'utf-8')
+      return JSON.parse(data)
+    }
+  } catch (error) {
+    console.error('강의 데이터 읽기 실패:', error)
+  }
+  return []
+}
+
+// 강의 데이터를 파일에 저장하기
+function saveCourses(courses: any[]) {
+  try {
+    const dir = path.dirname(COURSES_FILE)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2))
+    return true
+  } catch (error) {
+    console.error('강의 데이터 저장 실패:', error)
+    return false
+  }
+}
+
+// 초기 강의 데이터
+const INITIAL_COURSES = [
   {
     id: 'course1',
     name: 'C언어프로그래밍',
@@ -49,13 +83,58 @@ const DEMO_COURSES = [
   }
 ]
 
+// JWT에서 사용자 정보 추출
+async function getUserFromRequest(request: NextRequest) {
+  const authToken = request.cookies.get('auth-token')?.value
+
+  if (!authToken) {
+    return null
+  }
+
+  const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+  const secret = new TextEncoder().encode(jwtSecret)
+
+  try {
+    const { payload } = await jwtVerify(authToken, secret)
+    return {
+      userId: payload.userId as string,
+      userType: payload.userType as string,
+      name: payload.name as string
+    }
+  } catch (error) {
+    return null
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // 실제 구현에서는 JWT에서 professorId를 가져와야 함
-    const professorId = 'prof001' // 하드코딩된 테스트 ID
+    // JWT에서 professorId 가져오기
+    const user = await getUserFromRequest(request)
+
+    if (!user) {
+      return NextResponse.json(
+        { error: '인증이 필요합니다' },
+        { status: 401 }
+      )
+    }
+
+    const professorId = user.userId
+
+    // 파일에서 강의 데이터 읽기
+    let allCourses = getCourses()
+
+    // 초기 데이터가 없으면 기본 강의 생성
+    if (allCourses.length === 0) {
+      const initialCourses = INITIAL_COURSES.map(course => ({
+        ...course,
+        professorId: professorId
+      }))
+      saveCourses(initialCourses)
+      allCourses = initialCourses
+    }
 
     // 해당 교수의 강의만 필터링
-    const professorCourses = DEMO_COURSES.filter(course => course.professorId === professorId)
+    const professorCourses = allCourses.filter(course => course.professorId === professorId)
 
     return NextResponse.json({
       success: true,
@@ -81,7 +160,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 새 강의 생성 (실제로는 데이터베이스에 저장)
+    // JWT에서 professorId 가져오기
+    const user = await getUserFromRequest(request)
+    if (!user || user.userType !== 'professor') {
+      return NextResponse.json(
+        { error: '교수만 강의를 생성할 수 있습니다' },
+        { status: 403 }
+      )
+    }
+
+    // 기존 강의 데이터 읽기
+    const courses = getCourses()
+
+    // 새 강의 생성
     const newCourse = {
       id: `course_${Date.now()}`,
       name,
@@ -89,10 +180,14 @@ export async function POST(request: NextRequest) {
       description: description || '',
       location: location || null,
       totalSessions: 0,
-      professorId: 'prof001',
+      professorId: user.userId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
+
+    // 강의 목록에 추가하고 저장
+    courses.push(newCourse)
+    saveCourses(courses)
 
     return NextResponse.json({
       success: true,

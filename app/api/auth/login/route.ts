@@ -1,5 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
+import * as fs from 'fs'
+import * as path from 'path'
+
+// 간단한 파일 기반 저장소 경로
+const USERS_FILE = path.join(process.cwd(), 'data', 'users.json')
+
+// 사용자 데이터를 파일에서 읽어오기
+function getUsers() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, 'utf-8')
+      return JSON.parse(data)
+    }
+  } catch (error) {
+    console.error('사용자 데이터 읽기 실패:', error)
+  }
+
+  // 기본 테스트 계정
+  return {
+    students: {
+      'stu001': {
+        id: 'stu001',
+        name: '테스트 학생',
+        password: 'password123',
+        type: 'student'
+      }
+    },
+    professors: {
+      'prof001': {
+        id: 'prof001',
+        name: '테스트 교수',
+        password: 'password123',
+        type: 'professor'
+      }
+    }
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,20 +51,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 하드코딩된 테스트 계정 (데이터베이스 없이)
+    // 파일 또는 기본 데이터에서 사용자 찾기
+    const users = getUsers()
+    const userGroup = userType === 'student' ? users.students : users.professors
+    const userData = userGroup[id]
+
     let user = null
 
-    if (userType === 'student' && id === 'stu001' && password === 'password123') {
+    if (userData && userData.password === password) {
       user = {
-        id: 'stu001',
-        name: '테스트 학생',
-        type: 'student'
-      }
-    } else if (userType === 'professor' && id === 'prof001' && password === 'password123') {
-      user = {
-        id: 'prof001',
-        name: '테스트 교수',
-        type: 'professor'
+        id: userData.id,
+        name: userData.name,
+        type: userData.type
       }
     }
 

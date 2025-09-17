@@ -1,0 +1,79 @@
+[
+  {
+    "id": "course1",
+    "name": "C언어프로그래밍",
+    "courseCode": "C언어669",
+    "description": "C언어 기초부터 고급까지",
+    "location": "제1자연관 501호",
+    "totalSessions": 0,
+    "professorId": "xptmxm3"
+  },
+  {
+    "id": "course2",
+    "name": "데모 강의",
+    "courseCode": "DEMO101",
+    "description": "테스트용 강의입니다",
+    "location": null,
+    "totalSessions": 1,
+    "professorId": "xptmxm3"
+  },
+  {
+    "id": "course3",
+    "name": "자료구조와 알고리즘",
+    "courseCode": "자료구782",
+    "description": "자료구조와 알고리즘 이론 및 실습",
+    "location": "제1자연관 501호",
+    "totalSessions": 0,
+    "professorId": "xptmxm3"
+  },
+  {
+    "id": "course4",
+    "name": "컴퓨터과학개론",
+    "courseCode": "CS101",
+    "description": "컴퓨터과학의 기초 개념",
+    "location": null,
+    "totalSessions": 0,
+    "professorId": "xptmxm3"
+  },
+  {
+    "id": "course5",
+    "name": "웹 프로그래밍",
+    "courseCode": "WEB301",
+    "description": "HTML, CSS, JavaScript 기반 웹 개발",
+    "location": "컴퓨터공학관 204호",
+    "totalSessions": 0,
+    "professorId": "xptmxm3"
+  },
+  {
+    "id": "demo-course-xptmxm3",
+    "professorId": "xptmxm3",
+    "name": "데모 강의",
+    "courseCode": "DEMO101",
+    "description": "테스트용 강의입니다",
+    "location": "위도: 36.6291, 경도: 127.4565",
+    "classroomLocation": {
+      "latitude": 36.6291,
+      "longitude": 127.4565,
+      "radius": 100
+    },
+    "totalSessions": 0,
+    "createdAt": "2025-09-17T12:53:45.727Z",
+    "updatedAt": "2025-09-17T12:53:45.727Z"
+  },
+  {
+    "id": "demo-course-prof001",
+    "professorId": "prof001",
+    "name": "데모 강의",
+    "courseCode": "DEMO101",
+    "description": "테스트용 강의입니다",
+    "location": "위도: 36.6291, 경도: 127.4565",
+    "classroomLocation": {
+      "latitude": 36.6291,
+      "longitude": 127.4565,
+      "radius": 100
+    },
+    "totalSessions": 0,
+    "createdAt": "2025-09-17T13:37:09.423Z",
+    "updatedAt": "2025-09-17T13:37:09.423Z"
+  }
+]

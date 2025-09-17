@@ -195,8 +195,8 @@ export default function ScanPage() {
                 </div>
 
                 <div className="space-y-4">
-                  <Button 
-                    onClick={() => setScannerActive(true)} 
+                  <Button
+                    onClick={() => setScannerActive(true)}
                     className="w-full text-lg font-semibold py-4 px-6 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg transform transition-all duration-200 hover:scale-105 active:scale-95"
                     size="lg"
                   >

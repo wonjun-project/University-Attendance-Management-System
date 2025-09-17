@@ -1,6 +1,14 @@
 import { getCurrentUser } from '@/lib/auth'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { promises as fs } from 'fs'
+import path from 'path'
+
+interface EnrollmentRecord {
+  id: string
+  courseId: string
+  studentId: string
+  enrolledAt: string
+}
 
 // MVP용 자동 등록 API - 학생이 QR 스캔 시 자동으로 데모 강의에 등록
 export async function POST(request: NextRequest) {
@@ -16,11 +24,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only students can enroll' }, { status: 403 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
     const body = await request.json()
     const { courseId } = body
 
@@ -28,54 +31,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Course ID is required' }, { status: 400 })
     }
 
-    // 새 스키마에서는 student_id를 직접 사용 (TEXT)
-    const { data: studentRecord, error: studentError } = await supabase
-      .from('students')
-      .select('student_id')
-      .eq('student_id', user.userId)
-      .single()
+    // 파일 경로 설정
+    const dataDir = path.join(process.cwd(), 'data')
+    const enrollmentsPath = path.join(dataDir, 'enrollments.json')
 
-    if (studentError || !studentRecord) {
-      console.error('Student not found:', studentError)
-      return NextResponse.json({ error: 'Student record not found' }, { status: 404 })
+    // 등록 데이터 읽기
+    let enrollments: EnrollmentRecord[] = []
+    try {
+      const enrollmentsData = await fs.readFile(enrollmentsPath, 'utf-8')
+      enrollments = JSON.parse(enrollmentsData)
+    } catch (error) {
+      // 파일이 없으면 빈 배열로 시작
+      enrollments = []
     }
 
-    // Check if already enrolled
-    const { data: existingEnrollment } = await supabase
-      .from('course_enrollments')
-      .select('id')
-      .eq('course_id', courseId)
-      .eq('student_id', user.userId)
-      .single()
+    // 이미 등록되어 있는지 확인
+    const existingEnrollment = enrollments.find(
+      e => e.courseId === courseId && e.studentId === user.userId
+    )
 
     if (existingEnrollment) {
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         message: 'Already enrolled',
         enrollmentId: existingEnrollment.id
       })
     }
 
-    // Auto-enroll student in the course
-    const { data: enrollment, error: enrollError } = await supabase
-      .from('course_enrollments')
-      .insert({
-        course_id: courseId,
-        student_id: user.userId, // TEXT student_id 직접 사용
-        enrolled_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-
-    if (enrollError) {
-      console.error('Auto-enrollment error:', enrollError)
-      return NextResponse.json({ error: 'Failed to enroll student' }, { status: 500 })
+    // 새로운 등록 생성
+    const newEnrollment: EnrollmentRecord = {
+      id: `enroll_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      courseId: courseId,
+      studentId: user.userId,
+      enrolledAt: new Date().toISOString()
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    enrollments.push(newEnrollment)
+
+    // 파일에 저장
+    await fs.writeFile(enrollmentsPath, JSON.stringify(enrollments, null, 2))
+
+    console.log(`자동 등록 완료: ${user.name} (${user.userId}) -> ${courseId}`)
+
+    return NextResponse.json({
+      success: true,
       message: 'Successfully enrolled',
-      enrollmentId: enrollment.id
+      enrollmentId: newEnrollment.id
     })
   } catch (error) {
     console.error('Auto-enrollment API error:', error)

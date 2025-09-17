@@ -1,0 +1,14 @@
+[
+  {
+    "id": "enroll_1758115082658_1x7840jbc",
+    "courseId": "demo-course-xptmxm3",
+    "studentId": "stu001",
+    "enrolledAt": "2025-09-17T13:18:02.658Z"
+  },
+  {
+    "id": "enroll_1758116236070_jta2l99pc",
+    "courseId": "demo-course-prof001",
+    "studentId": "123456789",
+    "enrolledAt": "2025-09-17T13:37:16.070Z"
+  }
+]
