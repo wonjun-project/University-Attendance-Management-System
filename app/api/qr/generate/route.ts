@@ -8,6 +8,42 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// 타입 정의
+interface Course {
+  id: string
+  name: string
+  courseCode: string
+  description: string
+  location: string | null
+  professorId: string
+  totalSessions: number
+  classroomLocation?: {
+    latitude: number
+    longitude: number
+    radius: number
+  }
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface Session {
+  id: string
+  courseId: string
+  courseName: string
+  courseCode: string
+  date: string
+  qrCode: string
+  qrCodeExpiresAt: string
+  status: string
+  classroomLocation?: {
+    latitude: number
+    longitude: number
+    radius: number
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 // 세션 데이터 파일 경로
 const SESSIONS_FILE = path.join(process.cwd(), 'data', 'sessions.json')
 const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
@@ -26,7 +62,7 @@ function getSessions() {
 }
 
 // 세션 데이터를 파일에 저장하기
-function saveSessions(sessions: any[]) {
+function saveSessions(sessions: Session[]) {
   try {
     const dir = path.dirname(SESSIONS_FILE)
     if (!fs.existsSync(dir)) {
@@ -134,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     // 강의 데이터 확인 또는 생성
     let courses = getCourses()
-    let course = courses.find(c => c.id === courseId && c.professorId === user.userId)
+    let course = courses.find((c: Course) => c.id === courseId && c.professorId === user.userId)
 
     if (!course) {
       // 교수의 실제 위치가 전달되지 않은 경우 에러 처리
@@ -182,7 +218,7 @@ export async function POST(request: NextRequest) {
     let sessions = getSessions()
 
     // 오늘 날짜의 기존 세션 찾기
-    let session = sessions.find(s =>
+    let session = sessions.find((s: Session) =>
       s.courseId === actualCourseId &&
       s.date === today
     )

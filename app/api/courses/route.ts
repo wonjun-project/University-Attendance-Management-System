@@ -3,6 +3,24 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { jwtVerify } from 'jose'
 
+// Course 타입 정의
+interface Course {
+  id: string
+  name: string
+  courseCode: string
+  description: string
+  location: string | null
+  totalSessions: number
+  professorId: string
+  classroomLocation?: {
+    latitude: number
+    longitude: number
+    radius: number
+  }
+  createdAt?: string
+  updatedAt?: string
+}
+
 // 강의 데이터 파일 경로
 const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
 
@@ -20,7 +38,7 @@ function getCourses() {
 }
 
 // 강의 데이터를 파일에 저장하기
-function saveCourses(courses: any[]) {
+function saveCourses(courses: Course[]) {
   try {
     const dir = path.dirname(COURSES_FILE)
     if (!fs.existsSync(dir)) {
@@ -134,7 +152,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 해당 교수의 강의만 필터링
-    const professorCourses = allCourses.filter(course => course.professorId === professorId)
+    const professorCourses = allCourses.filter((course: Course) => course.professorId === professorId)
 
     return NextResponse.json({
       success: true,
