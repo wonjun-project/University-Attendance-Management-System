@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
+import { Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui'
 
 interface CourseStatistics {
   courseId: string
@@ -95,9 +95,10 @@ export default function ProfessorStatisticsPage() {
 
         const data = await response.json()
         setStatistics(data.statistics)
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Fetch statistics error:', error)
-        setError(error.message || '통계를 불러오는 중 오류가 발생했습니다.')
+        const message = error instanceof Error ? error.message : '통계를 불러오는 중 오류가 발생했습니다.'
+        setError(message)
       } finally {
         setIsLoading(false)
       }

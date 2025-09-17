@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import Image, { type ImageProps } from 'next/image'
 import { cn } from '@/lib/utils'
 
 const Avatar = forwardRef<
@@ -16,16 +17,27 @@ const Avatar = forwardRef<
 ))
 Avatar.displayName = 'Avatar'
 
-const AvatarImage = forwardRef<
-  HTMLImageElement,
-  React.ImgHTMLAttributes<HTMLImageElement>
->(({ className, ...props }, ref) => (
-  <img
-    ref={ref}
-    className={cn('aspect-square h-full w-full object-cover', className)}
-    {...props}
-  />
-))
+interface AvatarImageProps extends Omit<ImageProps, 'className' | 'fill'> {
+  className?: string
+  imageClassName?: string
+}
+
+const AvatarImage = forwardRef<HTMLSpanElement, AvatarImageProps>(
+  ({ className, imageClassName, alt, ...props }, ref) => (
+    <span
+      ref={ref}
+      className={cn('relative block h-full w-full overflow-hidden rounded-full', className)}
+    >
+      <Image
+        fill
+        sizes="40px"
+        alt={alt}
+        className={cn('object-cover', imageClassName)}
+        {...props}
+      />
+    </span>
+  )
+)
 AvatarImage.displayName = 'AvatarImage'
 
 const AvatarFallback = forwardRef<

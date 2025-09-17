@@ -45,9 +45,10 @@ export default function AttendanceStatusPage() {
 
         const data = await response.json()
         setAttendanceRecords(data.records || [])
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Fetch attendance records error:', error)
-        setError(error.message || '출석 기록을 불러오는 중 오류가 발생했습니다.')
+        const message = error instanceof Error ? error.message : '출석 기록을 불러오는 중 오류가 발생했습니다.'
+        setError(message)
       } finally {
         setIsLoading(false)
       }

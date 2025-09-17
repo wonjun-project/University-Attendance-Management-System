@@ -47,13 +47,14 @@ export function QRCodeScannerFixed({ onScanSuccess, onScanError, onClose }: QRCo
         })
         addLog('Camera permission granted')
         stream.getTracks().forEach(track => track.stop())
-      } catch (permError: any) {
-        addLog(`Permission error: ${permError.name}`)
-        if (permError.name === 'NotAllowedError' || permError.name === 'PermissionDeniedError') {
+      } catch (permError: unknown) {
+        const errorName = permError instanceof DOMException ? permError.name : 'UnknownError'
+        addLog(`Permission error: ${errorName}`)
+        if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError') {
           setStatus('permission_denied')
           setError('카메라 접근 권한이 필요합니다. 브라우저 설정에서 카메라를 허용해주세요.')
           return
-        } else if (permError.name === 'NotFoundError') {
+        } else if (errorName === 'NotFoundError') {
           setError('카메라를 찾을 수 없습니다.')
           setStatus('error')
           return
@@ -116,8 +117,9 @@ export function QRCodeScannerFixed({ onScanSuccess, onScanError, onClose }: QRCo
           }
           
           onScanSuccess(qrData)
-        } catch (error: any) {
-          addLog(`QR processing error: ${error.message}`)
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'unknown'
+          addLog(`QR processing error: ${message}`)
           const errorMsg = 'QR코드 처리 중 오류가 발생했습니다.'
           setError(errorMsg)
           onScanError?.(errorMsg)
@@ -136,9 +138,10 @@ export function QRCodeScannerFixed({ onScanSuccess, onScanError, onClose }: QRCo
       addLog('Scanner initialized successfully!')
       setStatus('scanning')
 
-    } catch (error: any) {
-      addLog(`Scanner initialization failed: ${error.message}`)
-      setError(`카메라 초기화 실패: ${error.message}`)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'unknown'
+      addLog(`Scanner initialization failed: ${message}`)
+      setError(`카메라 초기화 실패: ${message}`)
       setStatus('error')
     }
   }, [addLog, onScanSuccess, onScanError])
@@ -156,9 +159,9 @@ export function QRCodeScannerFixed({ onScanSuccess, onScanError, onClose }: QRCo
     
     // Wait a moment then retry
     setTimeout(() => {
-      initializeScanner()
+      void initializeScanner()
     }, 500)
-  }, [initializeScanner])
+  }, [addLog, initializeScanner])
 
   const handlePermissionRetry = useCallback(async () => {
     try {
@@ -168,7 +171,7 @@ export function QRCodeScannerFixed({ onScanSuccess, onScanError, onClose }: QRCo
       setStatus('loading')
       setError('')
       initializeScanner()
-    } catch (error: any) {
+    } catch {
       setError('카메라 접근이 여전히 거부되었습니다. 브라우저 설정을 확인해주세요.')
     }
   }, [initializeScanner])

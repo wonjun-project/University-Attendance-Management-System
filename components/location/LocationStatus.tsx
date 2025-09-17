@@ -21,7 +21,6 @@ export function LocationStatus({
   onLocationStatusChange,
   onLocationUpdate 
 }: LocationStatusProps) {
-  const [locationTracker, setLocationTracker] = useState<LocationTracker | null>(null)
   const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null)
   const [isLocationValid, setIsLocationValid] = useState<boolean>(true)
   const [trackingStatus, setTrackingStatus] = useState<'starting' | 'active' | 'error' | 'stopped'>('starting')
@@ -80,8 +79,6 @@ export function LocationStatus({
         trackingInterval: 5 * 60 * 1000 // 5 minutes
       }
     )
-
-    setLocationTracker(tracker)
 
     // Start tracking
     tracker.startTracking().then(() => {

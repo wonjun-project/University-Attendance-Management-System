@@ -40,6 +40,24 @@ interface EnrollmentRecord {
   enrolledAt: string
 }
 
+interface SessionRecord {
+  id: string
+  courseId: string
+  courseName: string
+  courseCode: string
+  date: string
+  qrCode: string
+  qrCodeExpiresAt: string
+  status: string
+  classroomLocation: {
+    latitude: number
+    longitude: number
+    radius: number
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -91,8 +109,8 @@ export async function POST(request: NextRequest) {
 
     // 세션 정보 조회
     const sessionsData = await fs.readFile(sessionsPath, 'utf-8')
-    const sessions = JSON.parse(sessionsData)
-    const session = sessions.find((s: any) => s.id === sessionId)
+    const sessions: SessionRecord[] = JSON.parse(sessionsData)
+    const session = sessions.find((s) => s.id === sessionId)
 
     if (!session) {
       console.error('Session not found:', sessionId)
@@ -131,7 +149,7 @@ export async function POST(request: NextRequest) {
     try {
       const enrollmentsData = await fs.readFile(enrollmentsPath, 'utf-8')
       enrollments = JSON.parse(enrollmentsData)
-    } catch (error) {
+    } catch {
       // 등록 파일이 없으면 빈 배열로 초기화
       enrollments = []
     }
@@ -196,7 +214,7 @@ export async function POST(request: NextRequest) {
     try {
       const attendanceData = await fs.readFile(attendancePath, 'utf-8')
       attendanceRecords = JSON.parse(attendanceData)
-    } catch (error) {
+    } catch {
       // 출석 파일이 없으면 빈 배열로 초기화
       attendanceRecords = []
     }

@@ -25,28 +25,36 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 export async function authenticateStudent(studentId: string, password: string): Promise<AuthUser | null> {
   const supabase = createClient()
+  type StudentRow = { student_id: string; name: string; password_hash: string }
 
   try {
     const { data, error } = await supabase
       .from('students')
       .select('student_id, name, password_hash')
       .eq('student_id', studentId)
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
+    if (error) {
       console.error('Student authentication error:', error)
       return null
     }
 
-    const isValid = await verifyPassword(password, data.password_hash)
+    const student = data as StudentRow | null
+
+    if (!student) {
+      console.warn('Student not found:', studentId)
+      return null
+    }
+
+    const isValid = await verifyPassword(password, student.password_hash)
     if (!isValid) {
       return null
     }
 
     console.log('Student authentication successful:', studentId)
     return {
-      id: data.student_id,
-      name: data.name,
+      id: student.student_id,
+      name: student.name,
       type: 'student'
     }
   } catch (error) {
@@ -57,28 +65,36 @@ export async function authenticateStudent(studentId: string, password: string): 
 
 export async function authenticateProfessor(professorId: string, password: string): Promise<AuthUser | null> {
   const supabase = createClient()
+  type ProfessorRow = { professor_id: string; name: string; password_hash: string }
 
   try {
     const { data, error } = await supabase
       .from('professors')
       .select('professor_id, name, password_hash')
       .eq('professor_id', professorId)
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
+    if (error) {
       console.error('Professor authentication error:', error)
       return null
     }
 
-    const isValid = await verifyPassword(password, data.password_hash)
+    const professor = data as ProfessorRow | null
+
+    if (!professor) {
+      console.warn('Professor not found:', professorId)
+      return null
+    }
+
+    const isValid = await verifyPassword(password, professor.password_hash)
     if (!isValid) {
       return null
     }
 
     console.log('Professor authentication successful:', professorId)
     return {
-      id: data.professor_id,
-      name: data.name,
+      id: professor.professor_id,
+      name: professor.name,
       type: 'professor'
     }
   } catch (error) {
@@ -106,7 +122,7 @@ export function validateSession(sessionData: string): SimpleSession | null {
     }
 
     return session
-  } catch (error) {
+  } catch {
     return null
   }
 }

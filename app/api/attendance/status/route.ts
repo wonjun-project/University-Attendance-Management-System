@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
@@ -28,60 +29,40 @@ export async function GET(request: NextRequest) {
     // 세션 소유권 확인 (교수)
     const { data: sessionRow } = await supabase
       .from('class_sessions')
-      .select(`
-        id,
-        date,
-        status,
-        qr_code_expires_at,
-        course_id,
-        courses (
-          id,
-          name,
-          professor_id
-        )
-      `)
+      .select(`id, date, status, qr_code_expires_at, course_id, courses ( id, name, professor_id )`)
       .eq('id', sessionId)
       .single()
 
-    if (!sessionRow || (sessionRow.courses as any)?.professor_id !== session.userId) {
+    const typedSession = sessionRow as any
+
+    if (!typedSession || typedSession?.courses?.professor_id !== session.userId) {
       return NextResponse.json({ error: 'Session not found or access denied' }, { status: 404 })
     }
 
     // 출석 데이터 + 학생 정보
     const { data: attendanceData } = await supabase
       .from('attendances')
-      .select(`
-        id,
-        status,
-        check_in_time,
-        check_out_time,
-        location_verified,
-        created_at,
-        updated_at,
-        student_id,
-        students (
-          student_id,
-          name
-        )
-      `)
+      .select(`id, status, check_in_time, check_out_time, location_verified, updated_at, student_id, session_id, users:users ( student_id, name )`)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
+
+    const attendances: any[] = Array.isArray(attendanceData) ? attendanceData : []
 
     // 수강 신청한 학생 수
     const { count: enrolledCount } = await supabase
       .from('course_enrollments')
       .select('*', { count: 'exact', head: true })
-      .eq('course_id', (sessionRow.courses as any)?.id || '')
+      .eq('course_id', typedSession.courses?.id || '')
 
     const totalStudents = enrolledCount || 0
-    const presentStudents = attendanceData?.filter(a => a.status === 'present').length || 0
-    const lateStudents = attendanceData?.filter(a => a.status === 'late').length || 0
-    const leftEarlyStudents = attendanceData?.filter(a => a.status === 'left_early').length || 0
+    const presentStudents = attendances.filter(a => a.status === 'present').length
+    const lateStudents = attendances.filter(a => a.status === 'late').length
+    const leftEarlyStudents = attendances.filter(a => a.status === 'left_early').length
     const absentStudents = totalStudents - presentStudents - lateStudents - leftEarlyStudents
 
-    const activeAttendanceIds = attendanceData
-      ?.filter(a => a.status === 'present')
-      .map(a => a.id) || []
+    const activeAttendanceIds = attendances
+      .filter(a => a.status === 'present')
+      .map(a => a.id)
 
     let recentLocations: any[] = []
     if (activeAttendanceIds.length > 0) {
@@ -92,16 +73,16 @@ export async function GET(request: NextRequest) {
         .order('timestamp', { ascending: false })
         .limit(50)
 
-      recentLocations = locationLogs || []
+      recentLocations = Array.isArray(locationLogs) ? locationLogs : []
     }
 
     const response = {
       session: {
-        id: sessionRow.id,
-        date: sessionRow.date,
-        status: sessionRow.status,
-        course: sessionRow.courses,
-        qr_expires_at: sessionRow.qr_code_expires_at
+        id: typedSession.id,
+        date: typedSession.date,
+        status: typedSession.status,
+        course: typedSession.courses ?? null,
+        qr_expires_at: typedSession.qr_code_expires_at
       },
       statistics: {
         total: totalStudents,
@@ -111,24 +92,24 @@ export async function GET(request: NextRequest) {
         absent: absentStudents,
         attendance_rate: totalStudents > 0 ? ((presentStudents / totalStudents) * 100).toFixed(1) : '0.0'
       },
-      attendances: attendanceData?.map(attendance => ({
+      attendances: attendances.map(attendance => ({
         id: attendance.id,
         student: {
-          id: (attendance as any).student_id,
-          name: (attendance as any).students?.name,
-          student_id: (attendance as any).students?.student_id
+          id: attendance.student_id,
+          name: attendance.users?.name ?? attendance.student_id,
+          student_id: attendance.users?.student_id ?? attendance.student_id
         },
         status: attendance.status,
         check_in_time: attendance.check_in_time,
         check_out_time: attendance.check_out_time,
         location_verified: attendance.location_verified,
         last_updated: attendance.updated_at
-      })) || [],
+      })),
       recent_locations: recentLocations.slice(0, 10)
     }
 
     return NextResponse.json(response)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Attendance status API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

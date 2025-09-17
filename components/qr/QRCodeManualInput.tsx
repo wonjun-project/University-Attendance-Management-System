@@ -42,7 +42,7 @@ export function QRCodeManualInput({ onScanSuccess, onScanError, onClose }: QRCod
             const u = new URL(raw)
             const parts = u.pathname.split('/').filter(Boolean)
             sessionId = parts[parts.length - 1] || null
-          } catch (e) {
+          } catch {
             // URL 파싱 실패
           }
         } else if (raw.includes('session_')) {
@@ -82,8 +82,8 @@ export function QRCodeManualInput({ onScanSuccess, onScanError, onClose }: QRCod
 
       // 성공
       onScanSuccess(parsed)
-    } catch (err: any) {
-      const errorMessage = err.message || 'QR 코드 처리 중 오류가 발생했습니다'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'QR 코드 처리 중 오류가 발생했습니다'
       setError(errorMessage)
       onScanError?.(errorMessage)
     } finally {

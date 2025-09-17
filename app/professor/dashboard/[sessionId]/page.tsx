@@ -72,8 +72,9 @@ export default function AttendanceDashboard() {
         const data = await response.json()
         setAttendanceData(data)
         setLastUpdated(new Date())
-      } catch (error: any) {
-        setError(error.message)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : '출석 현황을 불러오는데 실패했습니다.'
+        setError(message)
       } finally {
         setLoadingData(false)
       }

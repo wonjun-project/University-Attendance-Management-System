@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { jwtVerify, SignJWT } from 'jose'
+import { jwtVerify, SignJWT, type JWTPayload } from 'jose'
 import { cookies } from 'next/headers'
 import { createClient } from './supabase-server'
 
@@ -14,11 +14,10 @@ export interface AuthUser {
   type: 'student' | 'professor'
 }
 
-export interface SessionData {
+export interface SessionData extends JWTPayload {
   userId: string
   userType: 'student' | 'professor'
   name: string
-  [key: string]: any // Make it compatible with JWTPayload
 }
 
 // Password hashing
@@ -46,7 +45,7 @@ export async function verifyToken(token: string): Promise<SessionData | null> {
     const secret = new TextEncoder().encode(JWT_SECRET)
     const { payload } = await jwtVerify(token, secret)
     return payload as unknown as SessionData
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -130,25 +129,28 @@ export async function getCurrentUserFromRequest(request: Request): Promise<Sessi
 // Database operations
 export async function authenticateStudent(studentId: string, password: string): Promise<AuthUser | null> {
   const supabase = createClient()
-  
+  type StudentRow = { student_id: string; name: string; password_hash: string }
+
   try {
     const { data, error } = await supabase
       .from('students')
       .select('student_id, name, password_hash')
       .eq('student_id', studentId)
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Student authentication DB error:', error)
       return null
     }
 
-    if (!data) {
+    const student = data as StudentRow | null
+
+    if (!student) {
       console.log('Student not found:', studentId)
       return null
     }
 
-    const isValid = await verifyPassword(password, data.password_hash)
+    const isValid = await verifyPassword(password, student.password_hash)
     if (!isValid) {
       console.log('Invalid password for student:', studentId)
       return null
@@ -156,8 +158,8 @@ export async function authenticateStudent(studentId: string, password: string): 
 
     console.log('Student authentication successful:', studentId)
     return {
-      id: data.student_id,
-      name: data.name,
+      id: student.student_id,
+      name: student.name,
       type: 'student'
     }
   } catch (error) {
@@ -168,25 +170,28 @@ export async function authenticateStudent(studentId: string, password: string): 
 
 export async function authenticateProfessor(professorId: string, password: string): Promise<AuthUser | null> {
   const supabase = createClient()
-  
+  type ProfessorRow = { professor_id: string; name: string; password_hash: string }
+
   try {
     const { data, error } = await supabase
       .from('professors')
       .select('professor_id, name, password_hash')
       .eq('professor_id', professorId)
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Professor authentication DB error:', error)
       return null
     }
 
-    if (!data) {
+    const professor = data as ProfessorRow | null
+
+    if (!professor) {
       console.log('Professor not found:', professorId)
       return null
     }
 
-    const isValid = await verifyPassword(password, data.password_hash)
+    const isValid = await verifyPassword(password, professor.password_hash)
     if (!isValid) {
       console.log('Invalid password for professor:', professorId)
       return null
@@ -194,43 +199,12 @@ export async function authenticateProfessor(professorId: string, password: strin
 
     console.log('Professor authentication successful:', professorId)
     return {
-      id: data.professor_id,
-      name: data.name,
+      id: professor.professor_id,
+      name: professor.name,
       type: 'professor'
     }
   } catch (error) {
     console.error('Professor authentication error:', error)
     return null
   }
-}
-
-export async function createStudent(studentId: string, name: string, password: string): Promise<boolean> {
-  const supabase = createClient()
-  const passwordHash = await hashPassword(password)
-  
-  const { error } = await supabase
-    .from('students')
-    .insert({
-      student_id: studentId,
-      name,
-      password_hash: passwordHash
-    })
-
-  return !error
-}
-
-export async function createProfessor(professorId: string, name: string, email: string | null, password: string): Promise<boolean> {
-  const supabase = createClient()
-  const passwordHash = await hashPassword(password)
-  
-  const { error } = await supabase
-    .from('professors')
-    .insert({
-      professor_id: professorId,
-      name,
-      email,
-      password_hash: passwordHash
-    })
-
-  return !error
 }

@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 import { createClient } from '@/lib/supabase-server'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = createClient()
 
     // 기본 연결 테스트
-    const { data: testConnection, error: connectionError } = await supabase
+    const { error: connectionError } = await supabase
       .from('students')
       .select('count', { count: 'exact', head: true })
 

@@ -67,6 +67,14 @@ QR코드와 GPS를 이용해서 대학 출석을 관리하는 웹 애플리케�
    npm run dev
    ```
 
+   모바일 기기에서 카메라를 사용하려면 HTTPS가 필요합니다. 자체 서명 인증서로 HTTPS 개발 서버를 실행하려면 아래 명령을 사용하세요.
+
+   ```bash
+   npm run dev:https
+   ```
+
+   첫 실행 시 `certs/dev/localhost-cert.pem`을 브라우저(또는 기기)에 신뢰하도록 추가해야 카메라 권한이 정상 작동합니다.
+
 ### Vercel 배포
 
 1. **Vercel CLI 설치**

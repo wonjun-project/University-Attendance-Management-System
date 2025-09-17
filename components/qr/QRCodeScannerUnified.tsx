@@ -109,12 +109,13 @@ export function QRCodeScannerUnified({ onScanSuccess, onScanError, onClose }: QR
         })
         testStream.getTracks().forEach(track => track.stop())
         addLog('Camera permission granted')
-      } catch (permError: any) {
-        addLog(`Camera permission error: ${permError.name}`)
-        if (permError.name === 'NotAllowedError' || permError.name === 'PermissionDeniedError') {
+      } catch (permError: unknown) {
+        const errorName = permError instanceof DOMException ? permError.name : 'UnknownError'
+        addLog(`Camera permission error: ${errorName}`)
+        if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError') {
           setPermissionDenied(true)
           setError('📷 카메라 접근 권한이 필요합니다. 브라우저 설정에서 카메라를 허용해주세요.')
-        } else if (permError.name === 'NotFoundError') {
+        } else if (errorName === 'NotFoundError') {
           setError('📱 카메라를 찾을 수 없습니다.')
         } else {
           setError('⚠️ 카메라 초기화 오류가 발생했습니다.')
@@ -159,8 +160,9 @@ export function QRCodeScannerUnified({ onScanSuccess, onScanError, onClose }: QR
           setIsScanning(false)
           setIsInitializing(false)
           onScanSuccess(qrData)
-        } catch (error: any) {
-          addLog(`QR processing error: ${error.message}`)
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'unknown'
+          addLog(`QR processing error: ${message}`)
           const errorMsg = 'QR코드 처리 중 오류가 발생했습니다.'
           setError(errorMsg)
           onScanError?.(errorMsg)
@@ -180,8 +182,9 @@ export function QRCodeScannerUnified({ onScanSuccess, onScanError, onClose }: QR
       setCurrentMode(mode)
       addLog(`${mode} mode scanner initialized successfully`)
 
-    } catch (error: any) {
-      addLog(`Initialization failed in ${mode} mode: ${error.message}`)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'unknown'
+      addLog(`Initialization failed in ${mode} mode: ${message}`)
       
       // 고급 모드에서 실패하면 간단 모드로 자동 전환
       if (mode === 'advanced' && retryCount < maxRetries) {
@@ -192,7 +195,7 @@ export function QRCodeScannerUnified({ onScanSuccess, onScanError, onClose }: QR
       }
       
       // 간단 모드에서도 실패하면 오류 표시
-      setError(`❌ 카메라 초기화 실패: ${error.message}`)
+      setError(`❌ 카메라 초기화 실패: ${message}`)
       setIsInitializing(false)
     }
   }, [getAdvancedConfig, getSimpleConfig, waitForElement, addLog, onScanSuccess, onScanError, retryCount])
@@ -236,7 +239,7 @@ export function QRCodeScannerUnified({ onScanSuccess, onScanError, onClose }: QR
       setPermissionDenied(false)
       setError('')
       handleRetry()
-    } catch (error: any) {
+    } catch {
       setError('카메라 접근이 거부되었습니다. 브라우저 설정에서 카메라 권한을 허용해주세요.')
     }
   }, [handleRetry])

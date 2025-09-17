@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
@@ -11,8 +12,10 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (user.userType !== 'professor') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    const supabase = createClient()
+
     const { searchParams } = new URL(request.url)
-    const period = searchParams.get('period') || 'month' // all|week|month
+    const period = searchParams.get('period') || 'month'
     const filterCourseId = searchParams.get('courseId') || 'all'
 
     const now = new Date()
@@ -23,179 +26,202 @@ export async function GET(request: NextRequest) {
       fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // 교수 강의 목록
-    const { data: courses, error: coursesErr } = await supabase
+    const { data: coursesData, error: coursesErr } = await supabase
       .from('courses')
       .select('id,name,course_code')
       .eq('professor_id', user.userId)
       .order('created_at', { ascending: false })
+
     if (coursesErr) throw coursesErr
 
-    let courseIds = (courses || []).map((c) => c.id)
-    if (filterCourseId !== 'all') courseIds = courseIds.filter((id) => id === filterCourseId)
+    const courses: any[] = Array.isArray(coursesData) ? coursesData : []
+    let courseIds = courses.map(course => course.id)
+    if (filterCourseId !== 'all') {
+      courseIds = courseIds.filter(id => id === filterCourseId)
+    }
 
-    // 세션
-    const sessionQuery = supabase
-      .from('class_sessions')
-      .select('id, course_id, date, status, qr_code_expires_at')
-      .in('course_id', courseIds)
-      .order('date', { ascending: true })
-    const { data: sessions, error: sessionsErr } = fromDate
-      ? await sessionQuery.gte('date', fromDate.toISOString().slice(0, 10))
-      : await sessionQuery
-    if (sessionsErr) throw sessionsErr
+    let sessions: any[] = []
+    if (courseIds.length > 0) {
+      const sessionQuery = supabase
+        .from('class_sessions')
+        .select('id, course_id, date, status, qr_code_expires_at')
+        .in('course_id', courseIds)
+        .order('date', { ascending: true })
 
-    const sessionIds = (sessions || []).map((s) => s.id)
+      const { data: sessionsData, error: sessionsErr } = fromDate
+        ? await sessionQuery.gte('date', fromDate.toISOString().slice(0, 10))
+        : await sessionQuery
 
-    // 출석
-    const { data: attends } = sessionIds.length
+      if (sessionsErr) throw sessionsErr
+      sessions = Array.isArray(sessionsData) ? sessionsData : []
+    }
+
+    const sessionIds = sessions.map((session: any) => session.id)
+
+    const { data: attendsData } = sessionIds.length
       ? await supabase
           .from('attendances')
           .select('id, session_id, student_id, status, check_in_time, location_verified')
           .in('session_id', sessionIds)
-      : { data: [] as any[] }
+      : { data: [] }
 
-    // 수강신청
-    const { data: enrollments } = courseIds.length
+    const attends: any[] = Array.isArray(attendsData) ? attendsData : []
+
+    const { data: enrollmentsData } = courseIds.length
       ? await supabase
           .from('course_enrollments')
           .select('course_id, student_id')
           .in('course_id', courseIds)
-      : { data: [] as any[] }
+      : { data: [] }
 
-    // 학생 이름 조회(있으면)
-    const uniqueStudentIds = Array.from(new Set((attends || []).map((a) => a.student_id)))
-    const { data: studentRows } = uniqueStudentIds.length
+    const enrollments: any[] = Array.isArray(enrollmentsData) ? enrollmentsData : []
+
+    const uniqueStudentIds = Array.from(new Set(attends.map(a => a.student_id)))
+    const { data: studentRowsData } = uniqueStudentIds.length
       ? await supabase
-          .from('students')
+          .from('users')
           .select('student_id, name')
           .in('student_id', uniqueStudentIds)
-      : { data: [] as any[] }
-    const studentNameMap = new Map<string, string>((studentRows || []).map((s) => [s.student_id, s.name]))
+      : { data: [] }
 
-    // 개요
-    const totalCourses = filterCourseId === 'all' ? (courses?.length || 0) : 1
-    const totalSessions = sessions?.length || 0
-    const presentCnt = (attends || []).filter((a) => a.status === 'present').length
-    const lateCnt = (attends || []).filter((a) => a.status === 'late').length
-    const totalAttRows = (attends || []).length
+    const studentRows: any[] = Array.isArray(studentRowsData) ? studentRowsData : []
+    const studentNameMap = new Map(
+      studentRows
+        .filter(row => typeof row.student_id === 'string')
+        .map(row => [row.student_id as string, row.name as string])
+    )
+
+    const totalCourses = filterCourseId === 'all' ? courses.length : 1
+    const totalSessions = sessions.length
+    const presentCnt = attends.filter(a => a.status === 'present').length
+    const lateCnt = attends.filter(a => a.status === 'late').length
+    const totalAttRows = attends.length
     const overallAttendanceRate = totalAttRows > 0 ? Math.round(((presentCnt + lateCnt) / totalAttRows) * 100) : 0
 
-    // 강의별 통계
-    const courseStats = (filterCourseId === 'all' ? courses : courses?.filter((c) => c.id === filterCourseId))?.map((c) => {
-      const sForCourse = (sessions || []).filter((s) => s.course_id === c.id)
-      const sidSet = new Set(sForCourse.map((s) => s.id))
-      const aForCourse = (attends || []).filter((a) => sidSet.has(a.session_id))
-      const present = aForCourse.filter((a) => a.status === 'present').length
-      const late = aForCourse.filter((a) => a.status === 'late').length
-      const totalRows = aForCourse.length
+    const courseSource: any[] = filterCourseId === 'all'
+      ? courses
+      : courses.filter(course => course.id === filterCourseId)
+
+    const courseStats = courseSource.map((course: any) => {
+      const sessionsForCourse = sessions.filter((session: any) => session.course_id === course.id)
+      const sessionIdSet = new Set(sessionsForCourse.map((session: any) => session.id))
+      const attendanceForCourse = attends.filter((attendance: any) => sessionIdSet.has(attendance.session_id))
+      const present = attendanceForCourse.filter((attendance: any) => attendance.status === 'present').length
+      const late = attendanceForCourse.filter((attendance: any) => attendance.status === 'late').length
+      const totalRows = attendanceForCourse.length
       const attendanceRate = totalRows > 0 ? Math.round(((present + late) / totalRows) * 100) : 0
-      const studentsForCourse = new Set((enrollments || []).filter((e) => e.course_id === c.id).map((e) => e.student_id)).size
+      const studentsForCourse = new Set(
+        enrollments
+          .filter((enrollment: any) => enrollment.course_id === course.id)
+          .map((enrollment: any) => enrollment.student_id)
+      ).size
+
       return {
-        courseId: c.id,
-        courseName: c.name,
-        courseCode: c.course_code,
-        totalSessions: sForCourse.length,
+        courseId: course.id,
+        courseName: course.name,
+        courseCode: course.course_code,
+        totalSessions: sessionsForCourse.length,
         totalStudents: studentsForCourse,
         totalAttendance: totalRows,
         presentCount: present,
         attendanceRate,
       }
-    }) || []
+    })
 
-    // 학생별 통계(상위)
     const studentAgg = new Map<string, { present: number; late: number; absent: number }>()
-    for (const a of attends || []) {
-      const cur = studentAgg.get(a.student_id) || { present: 0, late: 0, absent: 0 }
-      if (a.status === 'present') cur.present++
-      else if (a.status === 'late') cur.late++
-      else cur.absent++
-      studentAgg.set(a.student_id, cur)
+    for (const attendance of attends as any[]) {
+      const current = studentAgg.get(attendance.student_id) || { present: 0, late: 0, absent: 0 }
+      if (attendance.status === 'present') current.present += 1
+      else if (attendance.status === 'late') current.late += 1
+      else current.absent += 1
+      studentAgg.set(attendance.student_id, current)
     }
-    const studentStats = Array.from(studentAgg.entries()).map(([id, v]) => {
-      const total = v.present + v.late + v.absent
-      const rate = total > 0 ? Math.round(((v.present + v.late) / total) * 100) : 0
+
+    const studentStats = Array.from(studentAgg.entries()).map(([id, value]) => {
+      const total = value.present + value.late + value.absent
+      const rate = total > 0 ? Math.round(((value.present + value.late) / total) * 100) : 0
       return {
         studentId: id,
         name: studentNameMap.get(id) || id,
         total,
-        present: v.present,
-        late: v.late,
-        absent: v.absent,
+        present: value.present,
+        late: value.late,
+        absent: value.absent,
         attendanceRate: rate,
       }
     }).sort((a, b) => b.attendanceRate - a.attendanceRate)
 
-    // 시간 패턴
     const byHourMap = new Map<number, number>()
-    for (const a of attends || []) {
-      if (!a.check_in_time) continue
-      const h = new Date(a.check_in_time).getHours()
-      byHourMap.set(h, (byHourMap.get(h) || 0) + 1)
+    for (const attendance of attends as any[]) {
+      if (!attendance.check_in_time) continue
+      const hour = new Date(attendance.check_in_time).getHours()
+      byHourMap.set(hour, (byHourMap.get(hour) || 0) + 1)
     }
-    const byHour = Array.from(byHourMap.entries()).sort((a, b) => a[0] - b[0]).map(([hour, count]) => ({ hour, count }))
+    const byHour = Array.from(byHourMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([hour, count]) => ({ hour, count }))
 
     const byDowMap = new Map<number, number>()
-    for (const s of sessions || []) {
-      const d = new Date(s.date + 'T00:00:00')
-      const dow = d.getDay() // 0=Sun
+    for (const session of sessions) {
+      const date = new Date(`${session.date}T00:00:00`)
+      const dow = date.getDay()
       byDowMap.set(dow, (byDowMap.get(dow) || 0) + 1)
     }
     const days = ['일', '월', '화', '수', '목', '금', '토']
-    const byDayOfWeek = Array.from(byDowMap.entries()).sort((a, b) => a[0] - b[0]).map(([dayNumber, count]) => ({ day: days[dayNumber], dayNumber, count }))
+    const byDayOfWeek = Array.from(byDowMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([dayNumber, count]) => ({ day: days[dayNumber], dayNumber, count }))
 
-    // 추이
     const byDateMap = new Map<string, { total: number; presentLate: number }>()
-    for (const s of sessions || []) {
-      byDateMap.set(s.date, byDateMap.get(s.date) || { total: 0, presentLate: 0 })
+    for (const session of sessions) {
+      byDateMap.set(session.date, byDateMap.get(session.date) || { total: 0, presentLate: 0 })
     }
-    for (const a of attends || []) {
-      const s = (sessions || []).find((x) => x.id === a.session_id)
-      if (!s) continue
-      const key = s.date
-      const cur = byDateMap.get(key) || { total: 0, presentLate: 0 }
-      cur.total += 1
-      if (a.status === 'present' || a.status === 'late') cur.presentLate += 1
-      byDateMap.set(key, cur)
+    for (const attendance of attends) {
+      const session = sessions.find((s: any) => s.id === attendance.session_id)
+      if (!session) continue
+      const key = session.date
+      const current = byDateMap.get(key) || { total: 0, presentLate: 0 }
+      current.total += 1
+      if (attendance.status === 'present' || attendance.status === 'late') current.presentLate += 1
+      byDateMap.set(key, current)
     }
     const attendanceByDate = Array.from(byDateMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, v]) => ({
+      .map(([date, value]) => ({
         date,
-        attendanceRate: v.total > 0 ? Math.round((v.presentLate / v.total) * 100) : 0,
-        totalStudents: v.total,
-        presentStudents: v.presentLate,
+        attendanceRate: value.total > 0 ? Math.round((value.presentLate / value.total) * 100) : 0,
+        totalStudents: value.total,
+        presentStudents: value.presentLate,
       }))
 
-    // 주간 추이(간단 집계)
     const weekMap = new Map<string, { total: number; presentLate: number }>()
     for (const entry of attendanceByDate) {
-      const d = new Date(entry.date + 'T00:00:00')
-      const diff = (d.getDay() + 6) % 7 // Monday-based
-      const weekStart = new Date(d)
-      weekStart.setDate(d.getDate() - diff)
+      const date = new Date(`${entry.date}T00:00:00`)
+      const diff = (date.getDay() + 6) % 7
+      const weekStart = new Date(date)
+      weekStart.setDate(date.getDate() - diff)
       const key = weekStart.toISOString().slice(0, 10)
-      const cur = weekMap.get(key) || { total: 0, presentLate: 0 }
-      cur.total += entry.totalStudents
-      cur.presentLate += entry.presentStudents
-      weekMap.set(key, cur)
+      const current = weekMap.get(key) || { total: 0, presentLate: 0 }
+      current.total += entry.totalStudents
+      current.presentLate += entry.presentStudents
+      weekMap.set(key, current)
     }
     const attendanceRateByWeek = Array.from(weekMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([weekStart, v]) => ({
+      .map(([weekStart, value]) => ({
         weekStart,
-        attendanceRate: v.total > 0 ? Math.round((v.presentLate / v.total) * 100) : 0,
-        totalStudents: v.total,
-        presentStudents: v.presentLate,
+        attendanceRate: value.total > 0 ? Math.round((value.presentLate / value.total) * 100) : 0,
+        totalStudents: value.total,
+        presentStudents: value.presentLate,
       }))
 
     const statistics = {
-      overview: { totalCourses, totalSessions, totalStudents: new Set((enrollments || []).map((e) => e.student_id)).size, overallAttendanceRate },
+      overview: {
+        totalCourses,
+        totalSessions,
+        totalStudents: new Set(enrollments.map(enrollment => enrollment.student_id)).size,
+        overallAttendanceRate,
+      },
       courseStats,
       studentStats,
       timePatterns: { byHour, byDayOfWeek },
@@ -203,7 +229,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, statistics })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Professor statistics API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

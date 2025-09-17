@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   // 보안을 위해 개발 환경에서만 실행
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json({

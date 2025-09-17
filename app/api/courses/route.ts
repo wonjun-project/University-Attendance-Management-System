@@ -119,7 +119,7 @@ async function getUserFromRequest(request: NextRequest) {
       userType: payload.userType as string,
       name: payload.name as string
     }
-  } catch (error) {
+  } catch {
     return null
   }
 }

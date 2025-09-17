@@ -65,9 +65,10 @@ export default function ProfessorDashboardPage() {
 
         const data = await response.json()
         setDashboardData(data.dashboard)
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Fetch dashboard error:', error)
-        setError(error.message || '대시보드를 불러오는 중 오류가 발생했습니다.')
+        const message = error instanceof Error ? error.message : '대시보드를 불러오는 중 오류가 발생했습니다.'
+        setError(message)
       } finally {
         setIsLoading(false)
       }

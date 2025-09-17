@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import CurrentLocationButton from './CurrentLocationButton'
-import PredefinedLocations from './PredefinedLocations'
+import PredefinedLocations, { type LocationOption as PredefinedLocationOption } from './PredefinedLocations'
 import { Input } from '@/components/ui'
 
 export type LocationType = 'predefined' | 'current'
@@ -51,14 +51,14 @@ function LocationSelector({
 
   // handleTypeChange 함수 제거 - 라디오 버튼에서 직접 setSelectedType 사용
 
-  const handlePredefinedLocationSelect = (location: any) => {
+  const handlePredefinedLocationSelect = (location: PredefinedLocationOption | null) => {
     console.log('🏢 Predefined location selected:', location)
     
     if (location) {
       const locationData: LocationData = {
-        latitude: parseFloat(location.latitude),
-        longitude: parseFloat(location.longitude),
-        radius: location.radius || parseInt(radius),
+        latitude: Number(location.latitude),
+        longitude: Number(location.longitude),
+        radius: location.radius || Number(radius) || 100,
         displayName: location.display_name,
         locationType: 'predefined',
         predefinedLocationId: location.id
@@ -71,7 +71,7 @@ function LocationSelector({
     }
   }
 
-  const handleCurrentLocationUpdate = (coords: any) => {
+  const handleCurrentLocationUpdate = (coords: { latitude: number; longitude: number; accuracy?: number; adaptiveRadius?: number }) => {
     console.log('🎯 Current location update:', coords)
     console.log('🎯 Current selectedType:', selectedType)
     console.log('🎯 Current value:', value)
@@ -81,7 +81,7 @@ function LocationSelector({
     console.log('🎯 Processing current location (bypassing selectedType check due to React async state)')
     
     // 적응형 반경 사용 (GPS 정확도 기반으로 자동 계산된 값)
-    const adaptiveRadius = coords.adaptiveRadius || parseInt(radius) || 100
+    const adaptiveRadius = coords.adaptiveRadius || Number(radius) || 100
     
     const locationData: LocationData = {
       latitude: coords.latitude,
@@ -104,7 +104,7 @@ function LocationSelector({
     if (value?.locationType === 'current') {
       const updatedLocation: LocationData = {
         ...value,
-        radius: parseInt(newRadius) || 100
+        radius: Number(newRadius) || 100,
       }
       onChange(updatedLocation)
     }

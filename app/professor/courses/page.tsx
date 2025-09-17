@@ -37,12 +37,12 @@ export default function CoursesPage() {
         setIsLoading(true)
         const response = await fetch('/api/courses')
         if (response.ok) {
-          const data = await response.json()
-          setCourses(data.courses || [])
+          const data = (await response.json()) as { courses?: Course[] }
+          setCourses(data.courses ?? [])
         } else {
           setError('강의 목록을 불러오는데 실패했습니다.')
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Failed to fetch courses:', error)
         setError('강의 목록을 불러오는데 실패했습니다.')
       } finally {
@@ -70,7 +70,7 @@ export default function CoursesPage() {
         body: JSON.stringify(formData),
       })
 
-      const data = await response.json()
+      const data = (await response.json()) as { course: Course; error?: string }
 
       if (!response.ok) {
         throw new Error(data.error || '강의 생성에 실패했습니다.')
@@ -84,9 +84,10 @@ export default function CoursesPage() {
       setShowCreateForm(false)
       setError('')
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Course creation error:', error)
-      setError(error.message || '강의 생성 중 오류가 발생했습니다.')
+      const message = error instanceof Error ? error.message : '강의 생성 중 오류가 발생했습니다.'
+      setError(message)
     }
   }
 

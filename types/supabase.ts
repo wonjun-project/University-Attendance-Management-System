@@ -216,6 +216,57 @@ export type Database = {
           },
         ]
       }
+      professors: {
+        Row: {
+          created_at: string
+          email: string | null
+          name: string
+          password_hash: string
+          professor_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          name: string
+          password_hash: string
+          professor_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          name?: string
+          password_hash?: string
+          professor_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      students: {
+        Row: {
+          created_at: string
+          name: string
+          password_hash: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          name: string
+          password_hash: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          password_hash?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           created_at: string

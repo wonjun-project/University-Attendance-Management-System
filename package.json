@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:https": "node server.js",
+    "dev:https": "next dev --hostname 0.0.0.0 --port 3001 --experimental-https --experimental-https-cert certs/dev/localhost-cert.pem --experimental-https-key certs/dev/localhost-key.pem",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -12,7 +12,6 @@
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
-    "@playwright/mcp": "^0.0.37",
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "@types/bcryptjs": "^2.4.6",
@@ -32,6 +31,10 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@apidevtools/swagger-cli": "^4.0.4",
+    "@ivotoby/openapi-mcp-server": "^1.9.1",
+    "@modelcontextprotocol/server-filesystem": "^2025.1.14",
+    "@playwright/mcp": "^0.0.37",
     "@playwright/test": "^1.55.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.16.10",

@@ -5,6 +5,29 @@ import path from 'path'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+interface SessionRecord {
+  id: string
+  courseId: string
+  courseName: string
+  courseCode: string
+  date: string
+  qrCode: string
+  qrCodeExpiresAt: string
+  status: string
+  classroomLocation?: {
+    latitude: number
+    longitude: number
+    radius: number
+  }
+}
+
+interface CourseRecord {
+  id: string
+  name: string
+  courseCode: string
+  location?: string | null
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -31,11 +54,11 @@ export async function GET(
       fs.readFile(coursesPath, 'utf-8')
     ])
 
-    const sessions = JSON.parse(sessionsData)
-    const courses = JSON.parse(coursesData)
+    const sessions: SessionRecord[] = JSON.parse(sessionsData)
+    const courses: CourseRecord[] = JSON.parse(coursesData)
 
     // 세션 찾기
-    const session = sessions.find((s: any) => s.id === sessionId)
+    const session = sessions.find((s) => s.id === sessionId)
 
     if (!session) {
       return NextResponse.json(
@@ -53,7 +76,7 @@ export async function GET(
     }
 
     // 강의 정보 찾기
-    const course = courses.find((c: any) => c.id === session.courseId)
+    const course = courses.find((c) => c.id === session.courseId)
 
     if (!course) {
       return NextResponse.json(

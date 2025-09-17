@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-server'
 
 // GET - 특정 강의 상세 조회
 export async function GET(
@@ -8,11 +9,7 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    // Create supabase client inside the function to avoid build-time errors
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase: any = createClient()
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -22,29 +19,12 @@ export async function GET(
       return NextResponse.json({ error: 'Only professors can view course details' }, { status: 403 })
     }
 
-    const { data: course, error } = await supabase
+    const { data: courseData, error } = await supabase
       .from('courses')
-      .select(`
-        id,
-        name,
-        course_code,
-        classroom_location,
-        schedule,
-        created_at,
-        class_sessions (
-          id,
-          date,
-          status,
-          attendances (
-            id,
-            student_id,
-            status,
-            students (
-              name
-            )
-          )
-        )
-      `)
+      .select(
+        `id, name, course_code, classroom_location, schedule, created_at,
+         class_sessions ( id, date, status, attendances ( id, student_id, status ) )`
+      )
       .eq('id', params.courseId)
       .eq('professor_id', user.userId)
       .single()
@@ -57,41 +37,56 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch course' }, { status: 500 })
     }
 
-    // Format the course data
+    const course = courseData as any
+    const classroomLocation =
+      course?.classroom_location && typeof course.classroom_location === 'object'
+        ? course.classroom_location
+        : null
+
     const formattedCourse = {
       id: course.id,
       name: course.name,
       courseCode: course.course_code,
-      description: null, // No description in current schema
-      schedule: Array.isArray(course.schedule) ? course.schedule.map((s: any) => 
-        `${['일','월','화','수','목','금','토'][s.day_of_week]} ${s.start_time}-${s.end_time}`
-      ).join(', ') : null,
-      location: course.classroom_location?.displayName || '위치 정보 없음',
-      locationLatitude: course.classroom_location?.latitude || null,
-      locationLongitude: course.classroom_location?.longitude || null,
-      locationRadius: course.classroom_location?.radius || 100,
+      description: null,
+      schedule: Array.isArray(course.schedule)
+        ? course.schedule
+            .map((item: any) =>
+              typeof item === 'object' && item
+                ? `${['일', '월', '화', '수', '목', '금', '토'][item.day_of_week]} ${item.start_time}-${item.end_time}`
+                : null
+            )
+            .filter(Boolean)
+            .join(', ')
+        : null,
+      location: classroomLocation?.displayName || '위치 정보 없음',
+      locationLatitude: classroomLocation?.latitude ?? null,
+      locationLongitude: classroomLocation?.longitude ?? null,
+      locationRadius: classroomLocation?.radius ?? 100,
       createdAt: course.created_at,
-      sessions: course.class_sessions?.map(session => ({
-        id: session.id,
-        date: session.date,
-        startTime: null,
-        endTime: null,
-        isActive: session.status === 'active',
-        attendanceCount: session.attendances?.length || 0,
-        presentCount: session.attendances?.filter(a => a.status === 'present').length || 0
-      })) || []
+      sessions: Array.isArray(course.class_sessions)
+        ? course.class_sessions.map((session: any) => {
+            const attendances = Array.isArray(session.attendances) ? session.attendances : []
+            const present = attendances.filter((a: any) => a.status === 'present').length
+            return {
+              id: session.id,
+              date: session.date,
+              startTime: null,
+              endTime: null,
+              isActive: session.status === 'active',
+              attendanceCount: attendances.length,
+              presentCount: present,
+            }
+          })
+        : [],
     }
 
     return NextResponse.json({
       success: true,
-      course: formattedCourse
+      course: formattedCourse,
     })
-
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get course error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error' 
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -101,11 +96,7 @@ export async function PUT(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    // Create supabase client inside the function to avoid build-time errors
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase: any = createClient()
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -118,15 +109,11 @@ export async function PUT(
     const body = await request.json()
     const { name, courseCode, schedule, location, locationLatitude, locationLongitude, locationRadius } = body
 
-    // Validate required fields
     if (!name || !courseCode) {
-      return NextResponse.json({ 
-        error: 'Course name and code are required' 
-      }, { status: 400 })
+      return NextResponse.json({ error: 'Course name and code are required' }, { status: 400 })
     }
 
-    // Check if course exists and belongs to this professor
-    const { data: existingCourse, error: checkError } = await supabase
+    const { error: checkError } = await supabase
       .from('courses')
       .select('id')
       .eq('id', params.courseId)
@@ -141,7 +128,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to validate course' }, { status: 500 })
     }
 
-    // Check if new course code conflicts with existing courses (excluding current course)
     if (courseCode) {
       const { data: conflictCourse, error: conflictError } = await supabase
         .from('courses')
@@ -157,34 +143,36 @@ export async function PUT(
       }
 
       if (conflictCourse) {
-        return NextResponse.json({ 
-          error: 'Course code already exists' 
-        }, { status: 409 })
+        return NextResponse.json({ error: 'Course code already exists' }, { status: 409 })
       }
     }
 
-    // Update course
+    const classroomLocation =
+      locationLatitude != null && locationLongitude != null
+        ? {
+            latitude: Number(locationLatitude),
+            longitude: Number(locationLongitude),
+            radius: Number(locationRadius) || 100,
+            displayName: location || '설정된 위치',
+          }
+        : null
+
+    const normalizedSchedule = Array.isArray(schedule) && schedule.length > 0 ? schedule : [
+      {
+        day_of_week: 2,
+        start_time: '09:00',
+        end_time: '10:30',
+      },
+    ]
+
     const { data: updatedCourse, error: updateError } = await supabase
       .from('courses')
       .update({
         name,
         course_code: courseCode,
-        classroom_location: locationLatitude && locationLongitude ? {
-          latitude: locationLatitude,
-          longitude: locationLongitude,
-          radius: locationRadius || 100,
-          displayName: location || '설정된 위치'
-        } : null,
-        schedule: schedule ? [{
-          day_of_week: 2, // Default Tuesday
-          start_time: '09:00',
-          end_time: '10:30'
-        }] : [{
-          day_of_week: 2, // Default Tuesday
-          start_time: '09:00',
-          end_time: '10:30'
-        }]
-      })
+        classroom_location: classroomLocation,
+        schedule: normalizedSchedule,
+      } as any)
       .eq('id', params.courseId)
       .eq('professor_id', user.userId)
       .select()
@@ -195,28 +183,38 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update course' }, { status: 500 })
     }
 
+    const updated = updatedCourse as any
+    const updatedLocation =
+      updated?.classroom_location && typeof updated.classroom_location === 'object'
+        ? updated.classroom_location
+        : null
+
     return NextResponse.json({
       success: true,
       course: {
-        id: updatedCourse.id,
-        name: updatedCourse.name,
-        courseCode: updatedCourse.course_code,
-        description: null, // No description in current schema
-        schedule: Array.isArray(updatedCourse.schedule) ? updatedCourse.schedule.map((s: { day_of_week: number; start_time: string; end_time: string }) => 
-          `${['일','월','화','수','목','금','토'][s.day_of_week]} ${s.start_time}-${s.end_time}`
-        ).join(', ') : null,
-        location: updatedCourse.classroom_location?.displayName || '설정된 위치',
-        locationLatitude: updatedCourse.classroom_location?.latitude || null,
-        locationLongitude: updatedCourse.classroom_location?.longitude || null,
-        locationRadius: updatedCourse.classroom_location?.radius || 100
-      }
+        id: updated.id,
+        name: updated.name,
+        courseCode: updated.course_code,
+        description: null,
+        schedule: Array.isArray(updated.schedule)
+          ? updated.schedule
+              .map((item: any) =>
+                typeof item === 'object' && item
+                  ? `${['일', '월', '화', '수', '목', '금', '토'][item.day_of_week]} ${item.start_time}-${item.end_time}`
+                  : null
+              )
+              .filter(Boolean)
+              .join(', ')
+          : null,
+        location: updatedLocation?.displayName || '설정된 위치',
+        locationLatitude: updatedLocation?.latitude ?? null,
+        locationLongitude: updatedLocation?.longitude ?? null,
+        locationRadius: updatedLocation?.radius ?? 100,
+      },
     })
-
-  } catch (error: any) {
+  } catch (error) {
     console.error('Update course error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error' 
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -226,11 +224,7 @@ export async function DELETE(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    // Create supabase client inside the function to avoid build-time errors
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase: any = createClient()
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -240,7 +234,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Only professors can delete courses' }, { status: 403 })
     }
 
-    // Check if course exists and belongs to this professor
     const { data: existingCourse, error: checkError } = await supabase
       .from('courses')
       .select('id, name')
@@ -256,7 +249,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Failed to validate course' }, { status: 500 })
     }
 
-    // Delete course (cascade will handle related records)
     const { error: deleteError } = await supabase
       .from('courses')
       .delete()
@@ -270,13 +262,10 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: `Course "${existingCourse.name}" has been deleted successfully`
+      message: `Course "${existingCourse?.name ?? params.courseId}" has been deleted successfully`,
     })
-
-  } catch (error: any) {
+  } catch (error) {
     console.error('Delete course error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error' 
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

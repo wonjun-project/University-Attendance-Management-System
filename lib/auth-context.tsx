@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { AuthUser } from '@/types'
 
 interface AuthContextType {
@@ -16,7 +16,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const fetchUserSession = async () => {
+  const fetchUserSession = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/session', {
         method: 'GET',
@@ -40,18 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error fetching user session:', error)
       return null
     }
-  }
+  }, [])
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     setLoading(true)
     const userData = await fetchUserSession()
     setUser(userData)
     setLoading(false)
-  }
+  }, [fetchUserSession])
 
   useEffect(() => {
     refreshUser()
-  }, [])
+  }, [refreshUser])
 
   const signOut = async () => {
     try {

@@ -104,7 +104,7 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
               const match = raw.match(/session_[A-Za-z0-9_-]+/)
               sessionId = match ? match[0] : null
             }
-          } catch (e) {
+          } catch {
             // URL 파싱 실패는 무시
           }
 
@@ -153,8 +153,9 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
         setStatus('scanning')
         onScanSuccess(parsed)
 
-      } catch (error: any) {
-        addLog(`QR processing error: ${error.message}`)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'unknown'
+        addLog(`QR processing error: ${message}`)
         const errorMsg = 'QR코드 처리 중 오류가 발생했습니다.'
         setError(errorMsg)
         onScanError?.(errorMsg)
@@ -169,6 +170,13 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
     setError('')
 
     try {
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        addLog(`Insecure context detected: protocol=${window.location.protocol}, host=${window.location.hostname}`)
+        setStatus('error')
+        setError('카메라 기능은 HTTPS 또는 localhost에서만 사용할 수 있습니다. 개발 서버를 https://로 열거나 로컬 호스트 도메인을 사용해 주세요.')
+        return
+      }
+
       // Request camera permission and stream with timeout
       addLog('Requesting camera access...')
       addLog('⚠️ 브라우저 권한 대화상자에서 "허용"을 클릭하세요!')
@@ -197,10 +205,11 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
           }
         })
         addLog('✅ 후면 카메라 접근 허용됨')
-      } catch (backCameraError: any) {
-        addLog(`후면 카메라 실패: ${backCameraError.message}`)
+      } catch (backCameraError: unknown) {
+        const message = backCameraError instanceof Error ? backCameraError.message : 'unknown'
+        addLog(`후면 카메라 실패: ${message}`)
         
-        if (backCameraError.message?.includes('TIMEOUT')) {
+        if (message.includes('TIMEOUT')) {
           setStatus('permission_denied')
           setError('카메라 권한 요청 시간이 초과되었습니다. 브라우저 주소창의 카메라 아이콘을 클릭하여 권한을 허용하거나 새로고침 후 다시 시도하세요.')
           return
@@ -216,16 +225,18 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
             }
           })
           addLog('✅ 전면 카메라 접근 허용됨')
-        } catch (frontCameraError: any) {
-          addLog(`전면 카메라 실패: ${frontCameraError.name || frontCameraError.message}`)
+        } catch (frontCameraError: unknown) {
+          const name = frontCameraError instanceof DOMException ? frontCameraError.name : undefined
+          const message = frontCameraError instanceof Error ? frontCameraError.message : 'unknown'
+          addLog(`전면 카메라 실패: ${name || message}`)
           
-          if (frontCameraError.message?.includes('TIMEOUT')) {
+          if (message.includes('TIMEOUT')) {
             setStatus('permission_denied')
             setError('카메라 권한 요청 시간이 초과되었습니다. 브라우저 주소창의 카메라 아이콘을 클릭하여 권한을 허용하거나 새로고침 후 다시 시도하세요.')
             return
           }
           
-          if (frontCameraError.name === 'NotAllowedError' || frontCameraError.name === 'PermissionDeniedError') {
+          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
             setStatus('permission_denied')
             setError('카메라 접근 권한이 필요합니다. 브라우저에서 카메라를 허용해주세요.')
             return
@@ -278,10 +289,11 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
       addLog('Starting QR code scanning...')
       scanIntervalRef.current = setInterval(scanQRCode, 100) // Scan every 100ms
       
-    } catch (error: any) {
-      addLog(`Camera initialization failed: ${error.message}`)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'unknown'
+      addLog(`Camera initialization failed: ${message}`)
       setStatus('error')
-      setError(`카메라 시작 실패: ${error.message}`)
+      setError(`카메라 시작 실패: ${message}`)
     }
   }, [addLog, scanQRCode])
 

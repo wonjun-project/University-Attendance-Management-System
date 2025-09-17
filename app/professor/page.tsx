@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingPage } from '@/components/ui'
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
 
 interface DashboardData {
   totalCourses: number
@@ -51,11 +51,20 @@ interface Statistics {
   }
 }
 
+type CourseSummary = {
+  id: string
+  name: string
+  courseCode: string
+  description?: string
+  location?: string
+  totalSessions: number
+}
+
 export default function ProfessorPage() {
   const { user, loading, signOut } = useAuth()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [courses, setCourses] = useState<any[]>([])
+  const [courses, setCourses] = useState<CourseSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -86,10 +95,10 @@ export default function ProfessorPage() {
         }
 
         if (coursesRes.ok) {
-          const coursesResult = await coursesRes.json()
-          setCourses(coursesResult.courses || [])
+          const coursesResult = (await coursesRes.json()) as { courses?: CourseSummary[] }
+          setCourses(coursesResult.courses ?? [])
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to fetch data:', error)
         setError('데이터를 불러오는데 실패했습니다.')
       } finally {

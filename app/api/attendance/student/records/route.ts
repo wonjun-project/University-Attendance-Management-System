@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
+import { Database } from '@/types/supabase'
+
+type AttendanceWithSession = Database['public']['Tables']['attendances']['Row'] & {
+  class_sessions: (
+    Database['public']['Tables']['class_sessions']['Row'] & {
+      courses: Pick<Database['public']['Tables']['courses']['Row'], 'name' | 'course_code'> | null
+    }
+  ) | null
+}
 
 export async function GET() {
   try {
@@ -15,7 +24,7 @@ export async function GET() {
     }
 
     // Create supabase client inside the function to avoid build-time errors
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
@@ -47,23 +56,24 @@ export async function GET() {
     }
 
     // Format the records for frontend
-    const formattedRecords = attendanceRecords?.map((record) => ({
+    const typedRecords: AttendanceWithSession[] = (attendanceRecords ?? []) as AttendanceWithSession[]
+    const formattedRecords = typedRecords.map((record) => ({
       id: record.id,
       sessionId: record.session_id,
-      courseName: (record.class_sessions as any)?.courses?.name || '알 수 없는 강의',
-      courseCode: (record.class_sessions as any)?.courses?.course_code || '',
-      sessionDate: (record.class_sessions as any)?.date || null,
+      courseName: record.class_sessions?.courses?.name ?? '알 수 없는 강의',
+      courseCode: record.class_sessions?.courses?.course_code ?? '',
+      sessionDate: record.class_sessions?.date ?? null,
       checkedInAt: record.check_in_time,
       status: record.status,
       locationVerified: record.location_verified
-    })) || []
+    }))
 
     return NextResponse.json({
       success: true,
       records: formattedRecords
     })
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get student attendance records error:', error)
     return NextResponse.json({ 
       error: 'Internal server error' 

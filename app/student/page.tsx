@@ -1,7 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingPage } from '@/components/ui'
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
 
 export default function StudentPage() {
   const { user, loading, signOut } = useAuth()

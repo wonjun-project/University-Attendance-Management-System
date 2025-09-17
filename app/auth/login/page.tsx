@@ -2,12 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent, Button, Input } from '@/components/ui'
 import { useAuth } from '@/lib/auth-context'
 
 export default function LoginPage() {
-  // const router = useRouter() // 사용하지 않아서 주석 처리
   const { refreshUser } = useAuth()
   const [formData, setFormData] = useState({
     email: '',

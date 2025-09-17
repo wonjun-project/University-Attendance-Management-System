@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui'
 import { QRCodeGenerator, QRCodeData } from '@/lib/qr/qr-generator'
 
@@ -30,7 +31,7 @@ export function QRCodeDisplay({ qrData, onRefresh, onExpire }: QRCodeDisplayProp
           }
         })
         setQrCodeImage(dataURL)
-      } catch (error) {
+      } catch {
         setError('QR코드 생성에 실패했습니다.')
       } finally {
         setLoading(false)
@@ -115,9 +116,12 @@ export function QRCodeDisplay({ qrData, onRefresh, onExpire }: QRCodeDisplayProp
           <div className={`p-4 bg-white rounded-xl border-2 ${
             isExpired ? 'border-error-200 opacity-50' : 'border-gray-200'
           }`}>
-            <img 
-              src={qrCodeImage} 
+            <Image
+              src={qrCodeImage}
               alt="출석 QR코드"
+              width={256}
+              height={256}
+              unoptimized
               className="w-64 h-64"
             />
           </div>

@@ -19,11 +19,16 @@ export async function GET(request: NextRequest) {
           .from('user_profiles')
           .select('role')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
-        const redirectUrl = userData?.role === 'student' 
-          ? `${origin}/student` 
-          : userData?.role === 'professor' 
+        const role =
+          userData && typeof userData === 'object' && 'role' in userData
+            ? (userData as { role?: string }).role
+            : undefined
+
+        const redirectUrl = role === 'student'
+          ? `${origin}/student`
+          : role === 'professor'
           ? `${origin}/professor`
           : `${origin}${next}`
 

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
-interface LocationOption {
+export interface LocationOption {
   id: string
   building_name: string
   room_number: string | null
@@ -29,7 +29,7 @@ export default function PredefinedLocations({
   onLocationSelect,
   selectedLocationId = null,
   disabled = false,
-  className = ""
+  className = ''
 }: PredefinedLocationsProps) {
   const [buildings, setBuildings] = useState<BuildingOption[]>([])
   const [rooms, setRooms] = useState<LocationOption[]>([])
@@ -38,14 +38,85 @@ export default function PredefinedLocations({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const getDummyRooms = useCallback((buildingName: string): LocationOption[] => {
+    const baseId = `dummy-${buildingName.toLowerCase().replace(/\s/g, '')}`
 
-  // Load buildings on component mount
-  useEffect(() => {
-    // 데이터베이스 마이그레이션이 적용되지 않은 경우 더미 데이터 사용
-    loadBuildings()
+    if (buildingName === '제1자연관') {
+      return [
+        {
+          id: `${baseId}-501`,
+          building_name: '제1자연관',
+          room_number: '501호',
+          display_name: '제1자연관 501호',
+          latitude: 36.6291,
+          longitude: 127.4565,
+          radius: 100,
+        },
+      ]
+    }
+
+    return []
   }, [])
 
-  // Load rooms when building is selected
+  const loadBuildings = useCallback(async () => {
+    try {
+      setError(null)
+      const { data, error } = await supabase.rpc('get_buildings')
+
+      if (error) {
+        console.warn('미리 정의된 건물 RPC가 없어 더미 데이터를 사용합니다.', error.message)
+        setBuildings([{ building_name: '제1자연관', room_count: 1 }])
+        return
+      }
+
+      setBuildings(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error('건물 목록 로드 실패:', err)
+      setBuildings([{ building_name: '제1자연관', room_count: 1 }])
+      setError(null)
+    }
+  }, [])
+
+  const loadRooms = useCallback(
+    async (buildingName: string) => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const { data, error } = await supabase.rpc('get_rooms_by_building', {
+          p_building_name: buildingName,
+        })
+
+        if (error) {
+          console.warn('강의실 RPC가 없어 더미 데이터를 사용합니다.', error.message)
+          setRooms(getDummyRooms(buildingName))
+          setSelectedRoom('')
+          return
+        }
+
+        if (Array.isArray(data)) {
+          setRooms(data as LocationOption[])
+          setSelectedRoom('')
+        } else {
+          setRooms([])
+          setSelectedRoom('')
+        }
+      } catch (err) {
+        console.error('강의실 목록 로드 실패:', err)
+        setRooms(getDummyRooms(buildingName))
+        setSelectedRoom('')
+        setError(null)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [getDummyRooms]
+  )
+
+  useEffect(() => {
+    loadBuildings()
+  }, [loadBuildings])
+
   useEffect(() => {
     if (selectedBuilding) {
       loadRooms(selectedBuilding)
@@ -53,98 +124,54 @@ export default function PredefinedLocations({
       setRooms([])
       setSelectedRoom('')
     }
-  }, [selectedBuilding])
+  }, [selectedBuilding, loadRooms])
 
-  // Handle room selection - useCallback이나 의존성 제거로 무한 루프 방지
   useEffect(() => {
     if (selectedRoom) {
-      const location = rooms.find(room => room.id === selectedRoom)
-      onLocationSelect(location || null)
+      const location = rooms.find(room => room.id === selectedRoom) || null
+      onLocationSelect(location)
     } else {
       onLocationSelect(null)
     }
-  }, [selectedRoom, rooms]) // onLocationSelect 의존성 제거로 무한 루프 방지
+  }, [selectedRoom, rooms, onLocationSelect])
 
-  const loadBuildings = async () => {
-    try {
-      setError(null)
-      const { data, error } = await supabase.rpc('get_buildings')
-      
-      if (error) {
-        // 데이터베이스 함수가 없는 경우 더미 데이터 사용
-        console.log('데이터베이스 함수가 없어서 더미 데이터를 사용합니다.')
-        const dummyBuildings = [
-          { building_name: '제1자연관', room_count: 1 }
-        ]
-        setBuildings(dummyBuildings)
-        return
-      }
-      
-      setBuildings(data || [])
-    } catch (error: any) {
-      console.error('Failed to load buildings:', error)
-      // 오류 발생 시에도 더미 데이터 사용
-      const dummyBuildings = [
-        { building_name: '제1자연관', room_count: 1 }
-      ]
-      setBuildings(dummyBuildings)
-      setError(null) // 더미 데이터를 사용하므로 에러 표시 안함
+  useEffect(() => {
+    if (!selectedLocationId || selectedLocationId === selectedRoom) {
+      return
     }
-  }
 
-  const loadRooms = async (buildingName: string) => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const { data, error } = await supabase.rpc('get_rooms_by_building', {
-        p_building_name: buildingName
-      })
-      
-      if (error) {
-        // 데이터베이스 함수가 없는 경우 더미 데이터 사용
-        console.log('데이터베이스 함수가 없어서 더미 강의실 데이터를 사용합니다.')
-        const dummyRooms = getDummyRooms(buildingName)
-        setRooms(dummyRooms)
-        setSelectedRoom('')
-        return
-      }
-      
-      setRooms(data || [])
-      setSelectedRoom('') // Reset room selection
-    } catch (error: any) {
-      console.error('Failed to load rooms:', error)
-      // 오류 발생 시에도 더미 데이터 사용
-      const dummyRooms = getDummyRooms(buildingName)
-      setRooms(dummyRooms)
-      setSelectedRoom('')
-      setError(null) // 더미 데이터를 사용하므로 에러 표시 안함
-    } finally {
-      setLoading(false)
-    }
-  }
+    const resolveLocation = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('predefined_locations')
+          .select('*')
+          .eq('id', selectedLocationId)
+          .maybeSingle()
 
-  // 더미 강의실 데이터 생성 함수
-  const getDummyRooms = (buildingName: string): LocationOption[] => {
-    const baseId = `dummy-${buildingName.toLowerCase().replace(/\s/g, '')}`
-    
-    switch (buildingName) {
-      case '제1자연관':
-        return [
-          { 
-            id: `${baseId}-501`, 
-            building_name: '제1자연관', 
-            room_number: '501호', 
-            display_name: '제1자연관 501호', 
-            latitude: 36.6291, 
-            longitude: 127.4565, 
-            radius: 100 
+        if (error) {
+          console.warn('미리 정의된 위치를 찾지 못해 더미 값을 사용합니다.', error.message)
+          const dummy = getDummyRooms(selectedBuilding || '제1자연관').find(room => room.id === selectedLocationId)
+          if (dummy) {
+            setSelectedBuilding(dummy.building_name)
+            setSelectedRoom(dummy.id)
+            onLocationSelect(dummy)
           }
-        ]
-      default:
-        return []
+          return
+        }
+
+        if (data) {
+          const location = data as LocationOption
+          setSelectedBuilding(location.building_name)
+          setSelectedRoom(location.id)
+          onLocationSelect(location)
+        }
+      } catch (err) {
+        console.warn('선택된 위치 로드 실패:', err)
+      }
     }
-  }
+
+    void resolveLocation()
+  }, [selectedLocationId, selectedRoom, selectedBuilding, getDummyRooms, onLocationSelect])
 
   const handleBuildingChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedBuilding(e.target.value)
@@ -157,11 +184,8 @@ export default function PredefinedLocations({
   return (
     <div className={className}>
       <div className="space-y-4">
-        {/* Building Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            건물 선택
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">건물 선택</label>
           <select
             value={selectedBuilding}
             onChange={handleBuildingChange}
@@ -169,7 +193,7 @@ export default function PredefinedLocations({
             className="input-field"
           >
             <option value="">건물을 선택하세요</option>
-            {buildings.map((building) => (
+            {buildings.map(building => (
               <option key={building.building_name} value={building.building_name}>
                 {building.building_name}
               </option>
@@ -177,11 +201,8 @@ export default function PredefinedLocations({
           </select>
         </div>
 
-        {/* Room Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            강의실 선택
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">강의실 선택</label>
           <select
             value={selectedRoom}
             onChange={handleRoomChange}
@@ -189,11 +210,13 @@ export default function PredefinedLocations({
             className="input-field"
           >
             <option value="">
-              {loading ? '강의실 로딩 중...' : 
-               !selectedBuilding ? '먼저 건물을 선택하세요' : 
-               '강의실을 선택하세요'}
+              {loading
+                ? '강의실 로딩 중...'
+                : !selectedBuilding
+                ? '먼저 건물을 선택하세요'
+                : '강의실을 선택하세요'}
             </option>
-            {rooms.map((room) => (
+            {rooms.map(room => (
               <option key={room.id} value={room.id}>
                 {room.display_name}
               </option>
@@ -201,23 +224,8 @@ export default function PredefinedLocations({
           </select>
         </div>
 
-        {/* Selected Location Info */}
-        {selectedRoom && rooms.find(r => r.id === selectedRoom) && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="text-sm text-blue-800">
-              📍 선택된 위치: {rooms.find(r => r.id === selectedRoom)?.display_name}
-              <div className="text-xs text-blue-600 mt-1">
-                위도: {rooms.find(r => r.id === selectedRoom)?.latitude.toFixed(6)}, 
-                경도: {rooms.find(r => r.id === selectedRoom)?.longitude.toFixed(6)}, 
-                반경: {rooms.find(r => r.id === selectedRoom)?.radius}m
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
         {error && (
-          <div className="p-3 bg-error-50 border border-error-200 text-error-800 rounded-lg text-sm">
+          <div className="text-sm text-error-600 bg-error-50 border border-error-200 rounded-lg p-3">
             {error}
           </div>
         )}

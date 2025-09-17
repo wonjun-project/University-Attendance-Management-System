@@ -6,12 +6,26 @@ import * as path from 'path'
 // 간단한 파일 기반 저장소 경로
 const USERS_FILE = path.join(process.cwd(), 'data', 'users.json')
 
+type UserRole = 'student' | 'professor'
+
+interface StoredUser {
+  id: string
+  name: string
+  password: string
+  type: UserRole
+}
+
+interface UsersData {
+  students: Record<string, StoredUser>
+  professors: Record<string, StoredUser>
+}
+
 // 사용자 데이터를 파일에서 읽어오기
-function getUsers() {
+function getUsers(): UsersData {
   try {
     if (fs.existsSync(USERS_FILE)) {
       const data = fs.readFileSync(USERS_FILE, 'utf-8')
-      return JSON.parse(data)
+      return JSON.parse(data) as UsersData
     }
   } catch (error) {
     console.error('사용자 데이터 읽기 실패:', error)
@@ -39,7 +53,7 @@ function getUsers() {
 }
 
 // 사용자 데이터를 파일에 저장하기
-function saveUsers(users: any) {
+function saveUsers(users: UsersData) {
   try {
     const dir = path.dirname(USERS_FILE)
     if (!fs.existsSync(dir)) {
@@ -99,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 새 사용자 추가
-    const newUser = {
+    const newUser: StoredUser = {
       id,
       name,
       password, // 실제로는 해시화해야 하지만 테스트용으로 평문 저장

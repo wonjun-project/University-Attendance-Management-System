@@ -65,22 +65,26 @@ export default function CurrentLocationButton({
       setLastLocation(coords)
       onLocationUpdate(coords)
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('위치 획득 실패:', error)
-      
-      switch (error.code) {
-        case error.PERMISSION_DENIED:
-          setError('위치 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
-          break
-        case error.POSITION_UNAVAILABLE:
-          setError('위치 정보를 사용할 수 없습니다.')
-          break
-        case error.TIMEOUT:
-          setError('위치 정보 요청이 시간 초과되었습니다.')
-          break
-        default:
-          setError('위치 정보를 가져오는데 실패했습니다.')
-          break
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        const geoError = error as GeolocationPositionError
+        switch (geoError.code) {
+          case geoError.PERMISSION_DENIED:
+            setError('위치 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+            break
+          case geoError.POSITION_UNAVAILABLE:
+            setError('위치 정보를 사용할 수 없습니다.')
+            break
+          case geoError.TIMEOUT:
+            setError('위치 정보 요청이 시간 초과되었습니다.')
+            break
+          default:
+            setError('위치 정보를 가져오는데 실패했습니다.')
+            break
+        }
+      } else {
+        setError('위치 정보를 가져오는데 실패했습니다.')
       }
     } finally {
       setLoading(false)

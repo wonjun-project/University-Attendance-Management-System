@@ -62,17 +62,22 @@ export default function QRCodePage() {
       if (!raw) {
         throw new Error(`서버 응답이 비어 있습니다. 상태코드: ${response.status}. 환경변수 및 권한 설정을 확인하세요.`)
       }
-      let result: any
+      let result:
+        | { success: true; qrData: QRCodeData; qrCode: string; expiresAt: string }
+        | { error: string }
       try {
         result = JSON.parse(raw)
       } catch {
         throw new Error(`서버 응답을 파싱하지 못했습니다. 상태코드: ${response.status}. 콘솔/함수 로그를 확인하세요.`)
       }
-      if (!response.ok) throw new Error(result.error || 'QR코드 생성에 실패했습니다.')
+      if (!response.ok || 'error' in result) {
+        throw new Error(('error' in result && result.error) || 'QR코드 생성에 실패했습니다.')
+      }
       setQrData(result.qrData)
-    } catch (e: any) {
-      console.error('QR generation error:', e)
-      setError(e.message || 'QR코드 생성 중 오류가 발생했습니다.')
+    } catch (error: unknown) {
+      console.error('QR generation error:', error)
+      const message = error instanceof Error ? error.message : 'QR코드 생성 중 오류가 발생했습니다.'
+      setError(message)
     } finally {
       setIsGenerating(false)
     }

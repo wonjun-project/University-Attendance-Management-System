@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     try {
       const enrollmentsData = await fs.readFile(enrollmentsPath, 'utf-8')
       enrollments = JSON.parse(enrollmentsData)
-    } catch (error) {
+    } catch {
       // 파일이 없으면 빈 배열로 시작
       enrollments = []
     }

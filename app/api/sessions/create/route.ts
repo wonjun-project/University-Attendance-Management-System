@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore, SessionData } from '@/lib/session-store'
+import { sessionStore } from '@/lib/session-store'
 
 export async function POST(request: NextRequest) {
   try {

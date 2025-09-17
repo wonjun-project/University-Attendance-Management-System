@@ -47,15 +47,16 @@ export function QRCodeScannerPure({ onScanSuccess, onScanError, onClose }: QRCod
           video: { facingMode: 'environment' } 
         })
         addLog('Back camera access granted')
-      } catch (backCameraError) {
+      } catch {
         addLog('Back camera not available, trying front camera...')
         try {
           // Fallback to any camera
           stream = await navigator.mediaDevices.getUserMedia({ video: true })
           addLog('Front camera access granted')
-        } catch (frontCameraError: any) {
-          addLog(`Camera access denied: ${frontCameraError.name}`)
-          if (frontCameraError.name === 'NotAllowedError' || frontCameraError.name === 'PermissionDeniedError') {
+        } catch (frontCameraError: unknown) {
+          const name = frontCameraError instanceof DOMException ? frontCameraError.name : 'UnknownError'
+          addLog(`Camera access denied: ${name}`)
+          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
             setStatus('permission_denied')
             setError('카메라 접근 권한이 필요합니다. 브라우저에서 카메라를 허용해주세요.')
             return
@@ -76,7 +77,7 @@ export function QRCodeScannerPure({ onScanSuccess, onScanError, onClose }: QRCod
       html5QrCodeRef.current = html5QrCode
 
       // Step 4: Start scanning with optimized config
-      const qrCodeSuccessCallback = (decodedText: string, decodedResult: any) => {
+      const qrCodeSuccessCallback = (decodedText: string) => {
         addLog(`QR detected: ${decodedText.substring(0, 30)}...`)
         
         try {
@@ -111,8 +112,9 @@ export function QRCodeScannerPure({ onScanSuccess, onScanError, onClose }: QRCod
             onScanSuccess(qrData)
           }).catch(console.error)
           
-        } catch (error: any) {
-          addLog(`QR processing error: ${error.message}`)
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'unknown'
+          addLog(`QR processing error: ${message}`)
           const errorMsg = 'QR코드 처리 중 오류가 발생했습니다.'
           setError(errorMsg)
           onScanError?.(errorMsg)
@@ -184,10 +186,11 @@ export function QRCodeScannerPure({ onScanSuccess, onScanError, onClose }: QRCod
       
       setStatus('camera_active')
 
-    } catch (error: any) {
-      addLog(`Camera initialization failed: ${error.message}`)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'unknown'
+      addLog(`Camera initialization failed: ${message}`)
       setStatus('error')
-      setError(`카메라 시작 실패: ${error.message}`)
+      setError(`카메라 시작 실패: ${message}`)
     }
   }, [addLog, onScanSuccess, onScanError])
 

@@ -84,17 +84,36 @@ export default function ScanPage() {
         router.push(`/student/attendance/${result.sessionId}`)
       }, 2000)
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Check-in error:', error)
       
-      if (error.code === 1) {
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        const geoError = error as GeolocationPositionError
+        if (geoError.code === geoError.PERMISSION_DENIED) {
+          setError('위치 접근이 거부되었습니다. 브라우저 설정에서 위치 접근을 허용해주세요.')
+        } else if (geoError.code === geoError.POSITION_UNAVAILABLE) {
+          setError('현재 위치를 확인할 수 없습니다. GPS가 켜져있는지 확인해주세요.')
+        } else if (geoError.code === geoError.TIMEOUT) {
+          setError('위치 확인 시간이 초과되었습니다. 다시 시도해주세요.')
+        } else {
+          setError('출석 체크 중 오류가 발생했습니다.')
+        }
+        return
+      }
+
+      if (error instanceof Error) {
+        setError(error.message || '출석 체크 중 오류가 발생했습니다.')
+        return
+      }
+
+      if ((error as { code?: number }).code === 1) {
         setError('위치 접근이 거부되었습니다. 브라우저 설정에서 위치 접근을 허용해주세요.')
-      } else if (error.code === 2) {
+      } else if ((error as { code?: number }).code === 2) {
         setError('현재 위치를 확인할 수 없습니다. GPS가 켜져있는지 확인해주세요.')
-      } else if (error.code === 3) {
+      } else if ((error as { code?: number }).code === 3) {
         setError('위치 확인 시간이 초과되었습니다. 다시 시도해주세요.')
       } else {
-        setError(error.message || '출석 체크 중 오류가 발생했습니다.')
+        setError('출석 체크 중 오류가 발생했습니다.')
       }
     } finally {
       setProcessing(false)

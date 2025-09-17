@@ -49,11 +49,11 @@ const SESSIONS_FILE = path.join(process.cwd(), 'data', 'sessions.json')
 const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
 
 // 세션 데이터를 파일에서 읽어오기
-function getSessions() {
+function getSessions(): Session[] {
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
       const data = fs.readFileSync(SESSIONS_FILE, 'utf-8')
-      return JSON.parse(data)
+      return JSON.parse(data) as Session[]
     }
   } catch (error) {
     console.error('세션 데이터 읽기 실패:', error)
@@ -77,11 +77,11 @@ function saveSessions(sessions: Session[]) {
 }
 
 // 강의 데이터를 파일에서 읽어오기
-function getCourses() {
+function getCourses(): Course[] {
   try {
     if (fs.existsSync(COURSES_FILE)) {
       const data = fs.readFileSync(COURSES_FILE, 'utf-8')
-      return JSON.parse(data)
+      return JSON.parse(data) as Course[]
     }
   } catch (error) {
     console.error('강의 데이터 읽기 실패:', error)
@@ -90,7 +90,7 @@ function getCourses() {
 }
 
 // 강의 데이터를 파일에 저장하기
-function saveCourses(courses: any[]) {
+function saveCourses(courses: Course[]) {
   try {
     const dir = path.dirname(COURSES_FILE)
     if (!fs.existsSync(dir)) {
@@ -122,7 +122,7 @@ async function getCurrentUserFromRequest(request: NextRequest) {
       userType: payload.userType as string,
       name: payload.name as string
     }
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -169,8 +169,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 강의 데이터 확인 또는 생성
-    let courses = getCourses()
-    let course = courses.find((c: Course) => c.id === courseId && c.professorId === user.userId)
+    const courses = getCourses()
+    let course = courses.find((c) => c.id === courseId && c.professorId === user.userId)
 
     if (!course) {
       // 교수의 실제 위치가 전달되지 않은 경우 에러 처리
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
     const today = new Date().toISOString().split('T')[0]
 
     // 세션 데이터 읽기
-    let sessions = getSessions()
+    const sessions = getSessions()
 
     // 오늘 날짜의 기존 세션 찾기
     let session = sessions.find((s: Session) =>
