@@ -70,7 +70,7 @@ export function QRCodeManualInput({ onScanSuccess, onScanError, onClose }: QRCod
         parsed = {
           sessionId: s.id,
           courseId: s.courseId || s.course_id || '',
-          expiresAt: s.expiresAt || s.qr_code_expires_at || new Date(Date.now() + 25 * 60 * 1000).toISOString(),
+          expiresAt: s.expiresAt || s.qrCodeExpiresAt || s.qr_code_expires_at || new Date(Date.now() + 25 * 60 * 1000).toISOString(),
           type: 'attendance' as const,
         }
       }

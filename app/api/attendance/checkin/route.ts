@@ -65,6 +65,24 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // 위치 값이 유효한 숫자인지 검증
+    const lat = Number(latitude)
+    const lon = Number(longitude)
+    const acc = Number(accuracy) || 0
+
+    if (isNaN(lat) || isNaN(lon)) {
+      return NextResponse.json({
+        error: '유효하지 않은 위치 정보입니다. 위도와 경도는 숫자여야 합니다.'
+      }, { status: 400 })
+    }
+
+    // 위치 값이 유효한 범위인지 검증
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      return NextResponse.json({
+        error: '유효하지 않은 위치 범위입니다. 위도는 -90~90, 경도는 -180~180 사이여야 합니다.'
+      }, { status: 400 })
+    }
+
     // 데이터 파일 경로 설정
     const dataDir = path.join(process.cwd(), 'data')
     const sessionsPath = path.join(dataDir, 'sessions.json')
@@ -83,14 +101,29 @@ export async function POST(request: NextRequest) {
 
     console.log('=== 출석 체크인 시도 ===')
     console.log(`학생: ${user.name} (${user.userId})`)
-    console.log(`위치: (${latitude}, ${longitude}) ±${accuracy}m`)
+    console.log(`위치: (${lat}, ${lon}) ±${acc}m`)
 
     if (session.status !== 'active') {
       return NextResponse.json({ error: 'Session is not active' }, { status: 400 })
     }
 
-    if (new Date(session.qrCodeExpiresAt) < new Date()) {
-      return NextResponse.json({ error: 'QR code has expired' }, { status: 400 })
+    // 만료 시간 디버깅
+    const expiresAt = new Date(session.qrCodeExpiresAt)
+    const currentTime = new Date()
+    console.log('QR 만료 시간 체크:')
+    console.log('  - 만료 시간:', expiresAt.toISOString(), '(', expiresAt.getTime(), ')')
+    console.log('  - 현재 시간:', currentTime.toISOString(), '(', currentTime.getTime(), ')')
+    console.log('  - 만료됨?:', expiresAt < currentTime)
+
+    if (expiresAt < currentTime) {
+      return NextResponse.json({
+        error: 'QR code has expired',
+        debug: {
+          expiresAt: session.qrCodeExpiresAt,
+          currentTime: currentTime.toISOString(),
+          expired: true
+        }
+      }, { status: 400 })
     }
 
     // 등록 여부 확인
@@ -129,13 +162,21 @@ export async function POST(request: NextRequest) {
 
     console.log(`강의실: (${classroomLocation.latitude}, ${classroomLocation.longitude}) 반경 ${classroomLocation.radius}m`)
 
-    // 학생 위치와 강의실 위치 간 거리 계산
+    // 학생 위치와 강의실 위치 간 거리 계산 (검증된 값 사용)
     const distance = calculateDistance(
-      latitude,
-      longitude,
+      lat,  // 검증된 숫자 값 사용
+      lon,  // 검증된 숫자 값 사용
       classroomLocation.latitude,
       classroomLocation.longitude
     );
+
+    // 거리 계산 결과가 유효한지 확인
+    if (isNaN(distance)) {
+      console.error('거리 계산 실패:', { lat, lon, classroomLocation })
+      return NextResponse.json({
+        error: '위치 검증 중 오류가 발생했습니다. 위치 정보를 확인해주세요.'
+      }, { status: 400 })
+    }
 
     // 허용 반경 내에 있는지 확인
     const isLocationValid = distance <= classroomLocation.radius;
@@ -176,9 +217,9 @@ export async function POST(request: NextRequest) {
       checkInTime: new Date().toISOString(),
       locationVerified: isLocationValid,
       distance: Math.round(distance),
-      latitude: latitude,
-      longitude: longitude,
-      accuracy: accuracy
+      latitude: lat,  // 검증된 값 사용
+      longitude: lon,  // 검증된 값 사용
+      accuracy: acc    // 검증된 값 사용
     }
 
     if (existingAttendance) {

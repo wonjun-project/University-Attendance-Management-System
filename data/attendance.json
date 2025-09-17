@@ -10,5 +10,17 @@
     "latitude": 36.6291,
     "longitude": 127.4565,
     "accuracy": 10
+  },
+  {
+    "id": "attendance_1758118403534_aqy3o5iqs",
+    "sessionId": "session_1758116229423_s0uytlvnp",
+    "studentId": "stu001",
+    "status": "present",
+    "checkInTime": "2025-09-17T14:13:23.534Z",
+    "locationVerified": true,
+    "distance": 0,
+    "latitude": 36.6291,
+    "longitude": 127.4565,
+    "accuracy": 20
   }
 ]

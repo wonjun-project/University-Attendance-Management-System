@@ -10,5 +10,11 @@
     "courseId": "demo-course-prof001",
     "studentId": "123456789",
     "enrolledAt": "2025-09-17T13:37:16.070Z"
+  },
+  {
+    "id": "enroll_1758118403533_bve61jnle",
+    "courseId": "demo-course-prof001",
+    "studentId": "stu001",
+    "enrolledAt": "2025-09-17T14:13:23.533Z"
   }
 ]
