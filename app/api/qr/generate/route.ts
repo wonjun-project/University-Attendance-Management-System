@@ -228,6 +228,10 @@ export async function POST(request: NextRequest) {
       session.qrCode = qrCodeValue
       session.qrCodeExpiresAt = expiresAt.toISOString()
       session.status = 'active'
+      // 위치 정보가 전달되면 업데이트
+      if (classroomLocation) {
+        session.classroomLocation = classroomLocation
+      }
       session.updatedAt = new Date().toISOString()
     } else {
       // 새 세션 생성

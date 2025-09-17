@@ -22,15 +22,15 @@
     "courseName": "데모 강의",
     "courseCode": "DEMO101",
     "date": "2025-09-17",
-    "qrCode": "session_1758119046676_v9bs84q08_demo-course-prof001",
-    "qrCodeExpiresAt": "2025-09-17T14:54:06.676Z",
+    "qrCode": "session_1758119385940_nadv84zpe_demo-course-prof001",
+    "qrCodeExpiresAt": "2025-09-17T14:59:45.940Z",
     "status": "active",
     "classroomLocation": {
-      "latitude": 36.6291,
-      "longitude": 127.4565,
-      "radius": 100
+      "latitude": 37.448287950926165,
+      "longitude": 126.89213560356093,
+      "radius": 163
     },
     "createdAt": "2025-09-17T13:37:09.423Z",
-    "updatedAt": "2025-09-17T14:24:06.676Z"
+    "updatedAt": "2025-09-17T14:29:45.940Z"
   }
 ]
