@@ -158,11 +158,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 세션에 저장된 강의실 위치 정보 사용 (없으면 기본값)
+    const sessionAny = session as any
     const classroomLocation = classroomLocationData || {
-      latitude: session.classroom_latitude || 37.5665,
-      longitude: session.classroom_longitude || 126.9780,
+      latitude: sessionAny.classroom_latitude || 37.5665,
+      longitude: sessionAny.classroom_longitude || 126.9780,
       // GPS 오차를 고려하여 반경 조정 (기본 150m, 정확도가 낮으면 더 늘림)
-      radius: session.classroom_radius || Math.max(150, accuracy * 3)
+      radius: sessionAny.classroom_radius || Math.max(150, accuracy * 3)
     }
 
     console.log(`강의실: (${classroomLocation.latitude}, ${classroomLocation.longitude}) 반경 ${classroomLocation.radius}m`)
