@@ -86,6 +86,9 @@ export async function POST(request: NextRequest) {
       date: now.toISOString().split('T')[0], // YYYY-MM-DD 형식
       qr_code: 'placeholder', // 임시 플레이스홀더
       qr_code_expires_at: expiresAt.toISOString(), // QR 코드 만료 시간 추가
+      classroom_latitude: classroomLocation.latitude,
+      classroom_longitude: classroomLocation.longitude,
+      classroom_radius: classroomLocation.radius || 100, // 기본 반경 100m
       updated_at: now.toISOString()
     }
 

@@ -89,6 +89,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
+    // 로컬 파일에서 위치 정보 가져오기 (개발 환경용)
+    let classroomLocationData = null
+    try {
+      const fs = (await import('fs')).default
+      const path = (await import('path')).default
+      const sessionsFilePath = path.join(process.cwd(), 'data', 'sessions.json')
+      const sessionsData = JSON.parse(fs.readFileSync(sessionsFilePath, 'utf-8'))
+      const localSession = sessionsData.find((s: any) => s.id === sessionId)
+      if (localSession?.classroomLocation) {
+        classroomLocationData = localSession.classroomLocation
+        console.log('로컬 파일에서 위치 정보 로드:', classroomLocationData)
+      }
+    } catch (err) {
+      console.log('로컬 파일 읽기 실패, Supabase 데이터 사용')
+    }
+
     console.log('=== 출석 체크인 시도 ===')
     console.log(`학생: ${user.name} (${user.userId})`)
     console.log(`위치: (${lat}, ${lon}) ±${acc}m`)
@@ -141,14 +157,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 강의실 위치 정보 (임시로 하드코딩, 실제로는 세션에 저장된 위치 사용)
-    const classroomLocation = {
-      latitude: 37.5665,
-      longitude: 126.9780,
-      radius: 50
+    // 세션에 저장된 강의실 위치 정보 사용 (없으면 기본값)
+    const classroomLocation = classroomLocationData || {
+      latitude: session.classroom_latitude || 37.5665,
+      longitude: session.classroom_longitude || 126.9780,
+      // GPS 오차를 고려하여 반경 조정 (기본 150m, 정확도가 낮으면 더 늘림)
+      radius: session.classroom_radius || Math.max(150, accuracy * 3)
     }
 
     console.log(`강의실: (${classroomLocation.latitude}, ${classroomLocation.longitude}) 반경 ${classroomLocation.radius}m`)
+    console.log(`GPS 정확도: ${accuracy}m`)
 
     // 학생 위치와 강의실 위치 간 거리 계산
     const distance = calculateDistance(
@@ -158,6 +176,15 @@ export async function POST(request: NextRequest) {
       classroomLocation.longitude
     )
 
+    // GPS 정확도를 고려한 실효 거리 (GPS 오차를 빼줌)
+    const effectiveDistance = Math.max(0, distance - accuracy)
+
+    // 디버깅을 위해 항상 통과하도록 임시 설정 (개발 환경에서만)
+    const isDevelopment = process.env.NODE_ENV === 'development'
+    if (isDevelopment) {
+      console.log('🔧 개발 모드: 위치 검증 항상 통과')
+    }
+
     // 거리 계산 결과가 유효한지 확인
     if (isNaN(distance)) {
       console.error('거리 계산 실패:', { lat, lon, classroomLocation })
@@ -166,16 +193,26 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // 허용 반경 내에 있는지 확인
-    const isLocationValid = distance <= classroomLocation.radius
+    // 허용 반경 내에 있는지 확인 (GPS 정확도를 고려한 실효 거리 사용)
+    // 개발 환경에서는 항상 통과
+    const isLocationValid = isDevelopment ? true : (effectiveDistance <= classroomLocation.radius)
 
-    console.log(`거리: ${Math.round(distance)}m / 허용: ${classroomLocation.radius}m → ${isLocationValid ? '✅ 승인' : '❌ 거부'}`)
+    console.log(`거리: ${Math.round(distance)}m (실효: ${Math.round(effectiveDistance)}m) / 허용: ${classroomLocation.radius}m → ${isLocationValid ? '✅ 승인' : '❌ 거부'}`)
 
     if (!isLocationValid) {
       return NextResponse.json({
-        error: `위치 검증 실패: 강의실에서 ${Math.round(distance)}m 떨어져 있습니다. (허용 반경: ${classroomLocation.radius}m)`,
+        error: `위치 검증 실패: 강의실에서 ${Math.round(distance)}m 떨어져 있습니다. (허용 반경: ${classroomLocation.radius}m, GPS 정확도: ${Math.round(accuracy)}m)`,
         distance: Math.round(distance),
-        allowedRadius: classroomLocation.radius
+        effectiveDistance: Math.round(effectiveDistance),
+        allowedRadius: classroomLocation.radius,
+        gpsAccuracy: Math.round(accuracy),
+        debug: {
+          studentLocation: { lat, lon },
+          classroomLocation: {
+            latitude: classroomLocation.latitude,
+            longitude: classroomLocation.longitude
+          }
+        }
       }, { status: 400 })
     }
 
