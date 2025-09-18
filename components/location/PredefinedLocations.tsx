@@ -126,14 +126,19 @@ export default function PredefinedLocations({
     }
   }, [selectedBuilding, loadRooms])
 
-  useEffect(() => {
-    if (selectedRoom) {
-      const location = rooms.find(room => room.id === selectedRoom) || null
-      onLocationSelect(location)
-    } else {
-      onLocationSelect(null)
-    }
-  }, [selectedRoom, rooms, onLocationSelect])
+  // 이 useEffect는 handleRoomChange에서 직접 처리하므로 주석 처리
+  // useEffect(() => {
+  //   console.log('🏢 selectedRoom useEffect - selectedRoom:', selectedRoom)
+  //   console.log('🏢 selectedRoom useEffect - rooms:', rooms)
+  //   if (selectedRoom) {
+  //     const location = rooms.find(room => room.id === selectedRoom) || null
+  //     console.log('🏢 selectedRoom useEffect - found location:', location)
+  //     onLocationSelect(location)
+  //   } else {
+  //     console.log('🏢 selectedRoom useEffect - calling onLocationSelect(null)')
+  //     onLocationSelect(null)
+  //   }
+  // }, [selectedRoom, rooms, onLocationSelect])
 
   useEffect(() => {
     if (!selectedLocationId || selectedLocationId === selectedRoom) {
@@ -174,11 +179,27 @@ export default function PredefinedLocations({
   }, [selectedLocationId, selectedRoom, selectedBuilding, getDummyRooms, onLocationSelect])
 
   const handleBuildingChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedBuilding(e.target.value)
+    const building = e.target.value
+    console.log('🏢 Building changed to:', building)
+    setSelectedBuilding(building)
+    // 건물이 변경되면 강의실 선택 초기화
+    setSelectedRoom('')
   }
 
   const handleRoomChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedRoom(e.target.value)
+    const roomId = e.target.value
+    console.log('🏢 Room change event - value:', roomId)
+    console.log('🏢 Available rooms:', rooms)
+    setSelectedRoom(roomId)
+
+    // 강의실이 선택되면 즉시 위치 정보 전달
+    if (roomId) {
+      const location = rooms.find(room => room.id === roomId)
+      console.log('🏢 Room selected, location:', location)
+      if (location) {
+        onLocationSelect(location)
+      }
+    }
   }
 
   return (
