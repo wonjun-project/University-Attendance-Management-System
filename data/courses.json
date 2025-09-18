@@ -75,5 +75,16 @@
     "totalSessions": 0,
     "createdAt": "2025-09-17T13:37:09.423Z",
     "updatedAt": "2025-09-17T13:37:09.423Z"
+  },
+  {
+    "id": "course_1758198669397",
+    "name": "데모 강의",
+    "courseCode": "DEMO101",
+    "description": "테스트용 데모 강의",
+    "location": null,
+    "totalSessions": 0,
+    "professorId": "prof001",
+    "createdAt": "2025-09-18T12:31:09.397Z",
+    "updatedAt": "2025-09-18T12:31:09.397Z"
   }
 ]

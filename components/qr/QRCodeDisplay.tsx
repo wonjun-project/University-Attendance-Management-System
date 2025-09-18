@@ -237,7 +237,7 @@ export function QRCodeDisplay({ qrData, onRefresh, onExpire, onEndSession }: QRC
                 )}
                 {onEndSession && (
                   <Button
-                    variant="destructive"
+                    variant="danger"
                     size="sm"
                     className="w-full"
                     onClick={handleEndSession}

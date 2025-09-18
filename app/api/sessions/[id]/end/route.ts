@@ -111,7 +111,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       present: attendances?.filter(a => a.status === 'present').length || 0,
       late: attendances?.filter(a => a.status === 'late').length || 0,
       absent: attendances?.filter(a => a.status === 'absent').length || 0,
-      left_early: attendances?.filter(a => a.status === 'left_early').length || 0
+      left_early: attendances?.filter(a => a.status === 'left_early').length || 0,
+      attendance_rate: 0
     };
 
     stats.attendance_rate = stats.total > 0

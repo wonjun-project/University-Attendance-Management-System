@@ -74,20 +74,18 @@ export class SupabaseRealtimeTracker {
         },
         (payload) => {
           console.log('📊 출석 상태 변화 감지:', payload);
-          onAttendanceUpdate(payload);
+          onAttendanceUpdate(payload as RealtimePostgresChangesPayload<AttendanceUpdate>);
         }
       )
-      .on('subscribe', (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ 세션 출석 구독 성공:', sessionId);
           this.isConnected = true;
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ 세션 출석 구독 오류');
+          if (onError) onError('Channel subscription error');
         }
-      })
-      .on('error', (error) => {
-        console.error('❌ 세션 출석 구독 오류:', error);
-        if (onError) onError(error);
-      })
-      .subscribe();
+      });
 
     this.channels.set(channelName, channel);
     return channelName;
@@ -129,20 +127,18 @@ export class SupabaseRealtimeTracker {
 
           if (attendance?.session_id === sessionId) {
             console.log('📍 위치 로그 업데이트 감지:', payload);
-            onLocationUpdate(payload);
+            onLocationUpdate(payload as RealtimePostgresChangesPayload<LocationLogUpdate>);
           }
         }
       )
-      .on('subscribe', (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ 세션 위치 로그 구독 성공:', sessionId);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ 세션 위치 로그 구독 오류');
+          if (onError) onError('Channel subscription error');
         }
-      })
-      .on('error', (error) => {
-        console.error('❌ 세션 위치 로그 구독 오류:', error);
-        if (onError) onError(error);
-      })
-      .subscribe();
+      });
 
     this.channels.set(channelName, channel);
     return channelName;
@@ -175,20 +171,18 @@ export class SupabaseRealtimeTracker {
         },
         (payload) => {
           console.log('🎓 세션 상태 변화 감지:', payload);
-          onSessionUpdate(payload);
+          onSessionUpdate(payload as RealtimePostgresChangesPayload<SessionUpdate>);
         }
       )
-      .on('subscribe', (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ 세션 상태 구독 성공:', sessionId);
           this.isConnected = true;
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ 세션 상태 구독 오류');
+          if (onError) onError('Channel subscription error');
         }
-      })
-      .on('error', (error) => {
-        console.error('❌ 세션 상태 구독 오류:', error);
-        if (onError) onError(error);
-      })
-      .subscribe();
+      });
 
     this.channels.set(channelName, channel);
     return channelName;
@@ -221,20 +215,18 @@ export class SupabaseRealtimeTracker {
         },
         (payload) => {
           console.log('👤 개인 출석 상태 변화 감지:', payload);
-          onAttendanceUpdate(payload);
+          onAttendanceUpdate(payload as RealtimePostgresChangesPayload<AttendanceUpdate>);
         }
       )
-      .on('subscribe', (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ 개인 출석 구독 성공:', attendanceId);
           this.isConnected = true;
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ 개인 출석 구독 오류');
+          if (onError) onError('Channel subscription error');
         }
-      })
-      .on('error', (error) => {
-        console.error('❌ 개인 출석 구독 오류:', error);
-        if (onError) onError(error);
-      })
-      .subscribe();
+      });
 
     this.channels.set(channelName, channel);
     return channelName;
@@ -304,16 +296,14 @@ export class SupabaseRealtimeTracker {
           onStatsUpdate(stats);
         }
       )
-      .on('subscribe', (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ 출석 통계 구독 성공:', sessionId);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ 출석 통계 구독 오류');
+          if (onError) onError('Channel subscription error');
         }
-      })
-      .on('error', (error) => {
-        console.error('❌ 출석 통계 구독 오류:', error);
-        if (onError) onError(error);
-      })
-      .subscribe();
+      });
 
     this.channels.set(channelName, channel);
     return channelName;

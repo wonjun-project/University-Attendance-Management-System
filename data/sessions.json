@@ -32,5 +32,22 @@
     },
     "createdAt": "2025-09-17T13:37:09.423Z",
     "updatedAt": "2025-09-17T14:29:45.940Z"
+  },
+  {
+    "id": "session_1758195392409_8z3bki9cb",
+    "courseId": "demo-course-prof001",
+    "courseName": "데모 강의",
+    "courseCode": "DEMO101",
+    "date": "2025-09-18",
+    "qrCode": "session_1758195392409_8z3bki9cb_demo-course-prof001",
+    "qrCodeExpiresAt": "2025-09-18T12:06:32.409Z",
+    "status": "active",
+    "classroomLocation": {
+      "latitude": 36.6291,
+      "longitude": 127.4565,
+      "radius": 100
+    },
+    "createdAt": "2025-09-18T11:36:32.409Z",
+    "updatedAt": "2025-09-18T11:36:32.409Z"
   }
 ]
