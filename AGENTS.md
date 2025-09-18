@@ -31,3 +31,6 @@
 ## Security & Configuration Tips
 - Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `JWT_SECRET` in `.env.local` and deployment targets; never embed secrets in code.
 - Service Role keys belong in server-only modules (e.g., API routes). JWTs are issued as `auth-token` httpOnly cookies—keep middleware in sync with auth changes.
+
+## 에이전트 응답 지침
+- 앞으로 사용자에게 제공하는 모든 답변은 반드시 한국어로 작성합니다.
