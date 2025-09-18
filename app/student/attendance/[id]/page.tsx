@@ -5,6 +5,8 @@ import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { createHeartbeatManager, type HeartbeatCallback } from '@/lib/realtime/heartbeat-manager'
+import { getRealtimeTracker } from '@/lib/realtime/supabase-tracker'
 
 interface SessionInfo {
   sessionId: string
@@ -38,110 +40,98 @@ export default function AttendancePage() {
   const [isTracking, setIsTracking] = useState(false)
   const [trackingStatus, setTrackingStatus] = useState<'in_range' | 'out_of_range' | 'checking'>('checking')
   const [lastLocationUpdate, setLastLocationUpdate] = useState<Date | null>(null)
-  const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [sessionEnded, setSessionEnded] = useState(false)
+  const [heartbeatManager, setHeartbeatManager] = useState<ReturnType<typeof createHeartbeatManager> | null>(null)
 
-  const trackLocation = useCallback(
-    async (attendanceId: string) => {
-      try {
-        setTrackingStatus('checking')
+  // Heartbeat 콜백 함수
+  const handleHeartbeatUpdate: HeartbeatCallback = useCallback((data) => {
+    console.log('💓 Heartbeat 업데이트:', data)
 
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 30000,
-          })
-        })
+    if (data.success && data.location && data.response) {
+      // 위치 정보 업데이트
+      setCurrentLocation({
+        lat: data.location.latitude,
+        lng: data.location.longitude
+      })
+      setLastLocationUpdate(new Date(data.location.timestamp))
 
-        const { latitude, longitude, accuracy } = position.coords
-        setCurrentLocation({ lat: latitude, lng: longitude })
-        setLocationError('')
+      // 추적 상태 업데이트
+      setTrackingStatus(data.response.locationValid ? 'in_range' : 'out_of_range')
 
-        const response = await fetch('/api/location/track', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            attendanceId,
-            latitude,
-            longitude,
-            accuracy,
-          }),
-        })
-
-        const result = await response.json()
-
-        if (response.ok) {
-          const locationValid = Boolean(result.locationValid)
-          setTrackingStatus(locationValid ? 'in_range' : 'out_of_range')
-          setLastLocationUpdate(new Date())
-
-          if (!locationValid) {
-            const distance = result.distance ? `${result.distance}m` : '범위 외'
-            const radius = result.allowedRadius ? `${result.allowedRadius}m` : '설정된 범위'
-            setLocationError(`⚠️ 강의실 범위를 벗어났습니다! (현재: ${distance}, 허용: ${radius})`)
-          } else {
-            const distance = result.distance ? `${result.distance}m` : '범위 내'
-            setLocationError(`✅ 강의실 범위 내 (거리: ${distance})`)
-            setTimeout(() => setLocationError(''), 3000)
-          }
-        } else {
-          setLocationError(`위치 추적 실패: ${result.error || '알 수 없는 오류'}`)
-          setTrackingStatus('out_of_range')
-        }
-      } catch (error: unknown) {
-        console.error('Location tracking error:', error)
-
-        if (typeof error === 'object' && error !== null && 'code' in error) {
-          const geoError = error as GeolocationPositionError
-          if (geoError.code === geoError.PERMISSION_DENIED) {
-            setLocationError('위치 접근 권한이 필요합니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
-          } else if (geoError.code === geoError.POSITION_UNAVAILABLE) {
-            setLocationError('위치 정보를 가져올 수 없습니다. GPS가 켜져있는지 확인해주세요.')
-          } else if (geoError.code === geoError.TIMEOUT) {
-            setLocationError('위치 확인 시간이 초과되었습니다.')
-          } else {
-            setLocationError('위치 추적 중 오류가 발생했습니다.')
-          }
-        } else {
-          setLocationError('위치 추적 중 오류가 발생했습니다.')
-        }
-
-        setTrackingStatus('out_of_range')
+      // 메시지 표시
+      if (data.response.locationValid) {
+        const distance = data.response.distance ? `${data.response.distance}m` : '범위 내'
+        setLocationError(`✅ 강의실 범위 내 (거리: ${distance})`)
+        setTimeout(() => setLocationError(''), 3000)
+      } else {
+        const distance = data.response.distance ? `${data.response.distance}m` : '범위 외'
+        const radius = data.response.allowedRadius ? `${data.response.allowedRadius}m` : '설정된 범위'
+        setLocationError(`⚠️ 강의실 범위를 벗어났습니다! (현재: ${distance}, 허용: ${radius})`)
       }
-    },
-    []
-  )
 
-  const startLocationTracking = useCallback(
-    (attendanceId: string) => {
-      if (isTracking || trackingInterval) {
+      // 세션 종료 감지
+      if (data.response.sessionEnded) {
+        console.log('🏁 세션이 종료되어 Heartbeat를 중지합니다')
+        setSessionEnded(true)
+        stopHeartbeatTracking()
+      }
+    } else if (data.error) {
+      console.error('💓 Heartbeat 오류:', data.error)
+      setLocationError(data.error)
+      setTrackingStatus('out_of_range')
+    }
+  }, [])
+
+  // Heartbeat 추적 시작
+  const startHeartbeatTracking = useCallback(
+    async (attendanceId: string) => {
+      if (isTracking || heartbeatManager) {
+        console.log('💓 이미 Heartbeat 추적 중입니다')
         return
       }
 
-      setIsTracking(true)
-      setTrackingStatus('checking')
+      try {
+        console.log('💓 Heartbeat 추적 시작:', attendanceId)
 
-      void trackLocation(attendanceId)
+        // Heartbeat Manager 생성
+        const manager = createHeartbeatManager(handleHeartbeatUpdate, {
+          interval: 30000, // 30초 (포그라운드)
+          backgroundInterval: 60000, // 1분 (백그라운드)
+          enableHighAccuracy: true
+        })
 
-      const interval = setInterval(() => {
-        void trackLocation(attendanceId)
-      }, 30000)
+        setHeartbeatManager(manager)
 
-      setTrackingInterval(interval)
+        // Heartbeat 시작
+        const success = await manager.startHeartbeat(attendanceId, sessionId)
+
+        if (success) {
+          setIsTracking(true)
+          setTrackingStatus('checking')
+          console.log('✅ Heartbeat 추적 시작 성공')
+        } else {
+          throw new Error('Heartbeat 시작 실패')
+        }
+
+      } catch (error) {
+        console.error('❌ Heartbeat 추적 시작 실패:', error)
+        setLocationError('위치 추적 시작에 실패했습니다. 페이지를 새로고침해주세요.')
+        setHeartbeatManager(null)
+      }
     },
-    [isTracking, trackingInterval, trackLocation]
+    [isTracking, heartbeatManager, handleHeartbeatUpdate, sessionId]
   )
 
-  const stopLocationTracking = useCallback(() => {
-    if (trackingInterval) {
-      clearInterval(trackingInterval)
-      setTrackingInterval(null)
+  // Heartbeat 추적 중지
+  const stopHeartbeatTracking = useCallback(() => {
+    if (heartbeatManager) {
+      console.log('💓 Heartbeat 추적 중지')
+      heartbeatManager.stopHeartbeat()
+      setHeartbeatManager(null)
     }
     setIsTracking(false)
     setTrackingStatus('checking')
-  }, [trackingInterval])
+  }, [heartbeatManager])
 
   const fetchSessionData = useCallback(async () => {
     try {
@@ -173,14 +163,14 @@ export default function AttendancePage() {
         })
 
         if (attendancePayload.attendance.status === 'present') {
-          startLocationTracking(attendancePayload.attendance.id)
+          await startHeartbeatTracking(attendancePayload.attendance.id)
         }
       }
     } catch (error) {
       console.error('데이터 가져오기 실패:', error)
       setLocationError(error instanceof Error ? error.message : '정보를 가져올 수 없습니다.')
     }
-  }, [sessionId, startLocationTracking])
+  }, [sessionId, startHeartbeatTracking])
 
   useEffect(() => {
     if (sessionId) {
@@ -188,15 +178,15 @@ export default function AttendancePage() {
     }
 
     return () => {
-      stopLocationTracking()
+      stopHeartbeatTracking()
     }
-  }, [sessionId, fetchSessionData, stopLocationTracking])
+  }, [sessionId, fetchSessionData, stopHeartbeatTracking])
 
   useEffect(() => {
     return () => {
-      stopLocationTracking()
+      stopHeartbeatTracking()
     }
-  }, [stopLocationTracking])
+  }, [stopHeartbeatTracking])
 
   if (loading) {
     return <div className="min-h-screen bg-gray-50" />
@@ -299,6 +289,17 @@ export default function AttendancePage() {
                 </div>
               )}
 
+              {sessionEnded && (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <h3 className="font-semibold text-gray-700">
+                    🏁 수업이 종료되었습니다
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    교수님이 수업을 종료하여 위치 추적이 중지되었습니다. 출석 상태가 최종 확정되었습니다.
+                  </p>
+                </div>
+              )}
+
               {isTracking && (
                 <div
                   className={`p-4 rounded-lg ${
@@ -321,7 +322,7 @@ export default function AttendancePage() {
                     >
                       실시간 위치 추적
                     </h3>
-                    <Button size="sm" variant="secondary" onClick={stopLocationTracking}>
+                    <Button size="sm" variant="secondary" onClick={stopHeartbeatTracking}>
                       추적 중지
                     </Button>
                   </div>

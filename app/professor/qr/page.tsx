@@ -89,6 +89,40 @@ export default function QRCodePage() {
     setError('QR코드가 만료되었습니다. 새로 생성해주세요.')
   }
 
+  const handleEndSession = async () => {
+    if (!qrData?.sessionId) {
+      setError('세션 ID를 찾을 수 없습니다.')
+      return
+    }
+
+    try {
+      console.log('🏁 수업 종료 시작:', qrData.sessionId)
+
+      const response = await fetch(`/api/sessions/${qrData.sessionId}/end`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '수업 종료에 실패했습니다.')
+      }
+
+      const result = await response.json()
+      console.log('✅ 수업 종료 성공:', result)
+
+      // 성공 메시지 표시
+      alert(`수업이 성공적으로 종료되었습니다!\n\n📊 출석 통계:\n- 전체 학생: ${result.statistics.total}명\n- 출석: ${result.statistics.present}명\n- 지각: ${result.statistics.late}명\n- 결석: ${result.statistics.absent}명\n- 조퇴: ${result.statistics.left_early}명\n- 출석률: ${result.statistics.attendance_rate}`)
+
+    } catch (error) {
+      console.error('❌ 수업 종료 실패:', error)
+      const message = error instanceof Error ? error.message : '수업 종료 중 오류가 발생했습니다.'
+      setError(message)
+    }
+  }
+
   if (loading || !user || user.role !== 'professor') {
     return <div className="min-h-screen bg-gray-50" />
   }
@@ -101,7 +135,7 @@ export default function QRCodePage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <Link href="/professor" className="text-gray-400 hover:text-gray-600">← 대시보드</Link>
-              <h1 className="text-xl font-semibold text-gray-900">QR코드 생성</h1>
+              <h1 className="text-xl font-semibold text-gray-900">강의 시작</h1>
               <Badge variant="primary">출석 관리</Badge>
             </div>
             <div className="flex items-center space-x-4">
@@ -130,19 +164,24 @@ export default function QRCodePage() {
         <div className="grid lg:grid-cols-2 gap-8">
           <div className="flex justify-center">
             {qrData ? (
-              <QRCodeDisplay qrData={qrData} onRefresh={handleRefreshQR} onExpire={handleExpiredQR} />
+              <QRCodeDisplay
+                qrData={qrData}
+                onRefresh={handleRefreshQR}
+                onExpire={handleExpiredQR}
+                onEndSession={handleEndSession}
+              />
             ) : (
               <Card className="w-full max-w-md">
                 <CardContent className="p-8">
                   <div className="text-center space-y-6">
                     <div className="w-32 h-32 bg-primary-100 rounded-full flex items-center justify-center mx-auto">
                       <svg className="w-16 h-16 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M19 10a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">출석용 QR코드 생성</h2>
-                      <p className="text-gray-600">위에서 강의실 위치를 설정한 후 QR코드를 생성하세요.</p>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">강의 시작</h2>
+                      <p className="text-gray-600">수업용 QR코드를 생성하세요.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">강의 선택(선택)</label>
@@ -165,7 +204,7 @@ export default function QRCodePage() {
                       disabled={isGenerating || !locationData}
                       className="w-full"
                     >
-                      {isGenerating ? '생성 중...' : !locationData ? '위치를 먼저 설정하세요' : 'QR코드 생성하기'}
+                      {isGenerating ? '강의 시작 중...' : !locationData ? '위치를 먼저 설정하세요' : '강의 시작'}
                     </Button>
                   </div>
                 </CardContent>
@@ -176,11 +215,11 @@ export default function QRCodePage() {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>QR코드 사용 방법</CardTitle>
+                <CardTitle>강의 진행 방법</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-600">
                 <p>1. 강의실 위치를 설정합니다(현재 위치 또는 미리 정의된 강의실).</p>
-                <p>2. QR코드를 생성하고 강의실 화면에 표시합니다.</p>
+                <p>2. 강의 시작 버튼을 눌러 출석용 QR코드를 생성합니다.</p>
                 <p>3. 학생들은 QR을 스캔하고 GPS 검증을 통과하면 출석 처리됩니다.</p>
                 <p>4. QR코드는 기본 30분 후 만료됩니다.</p>
               </CardContent>

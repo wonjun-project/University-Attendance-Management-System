@@ -1,284 +1,174 @@
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
-import * as fs from 'fs'
-import * as path from 'path'
+import { getCurrentUser } from '@/lib/auth'
 
-// Ensure Node.js runtime (service role key usage)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// 타입 정의
-interface Course {
-  id: string
-  name: string
-  courseCode: string
-  description: string
-  location: string | null
-  professorId: string
-  totalSessions: number
-  classroomLocation?: {
-    latitude: number
-    longitude: number
-    radius: number
-  }
-  createdAt?: string
-  updatedAt?: string
-}
-
-interface Session {
-  id: string
+interface QRGenerateRequest {
   courseId: string
-  courseName: string
-  courseCode: string
-  date: string
-  qrCode: string
-  qrCodeExpiresAt: string
-  status: string
-  classroomLocation?: {
+  expiresInMinutes?: number
+  classroomLocation: {
     latitude: number
     longitude: number
     radius: number
   }
-  createdAt: string
-  updatedAt: string
-}
-
-// 세션 데이터 파일 경로
-const SESSIONS_FILE = path.join(process.cwd(), 'data', 'sessions.json')
-const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
-
-// 세션 데이터를 파일에서 읽어오기
-function getSessions(): Session[] {
-  try {
-    if (fs.existsSync(SESSIONS_FILE)) {
-      const data = fs.readFileSync(SESSIONS_FILE, 'utf-8')
-      return JSON.parse(data) as Session[]
-    }
-  } catch (error) {
-    console.error('세션 데이터 읽기 실패:', error)
-  }
-  return []
-}
-
-// 세션 데이터를 파일에 저장하기
-function saveSessions(sessions: Session[]) {
-  try {
-    const dir = path.dirname(SESSIONS_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2))
-    return true
-  } catch (error) {
-    console.error('세션 데이터 저장 실패:', error)
-    return false
-  }
-}
-
-// 강의 데이터를 파일에서 읽어오기
-function getCourses(): Course[] {
-  try {
-    if (fs.existsSync(COURSES_FILE)) {
-      const data = fs.readFileSync(COURSES_FILE, 'utf-8')
-      return JSON.parse(data) as Course[]
-    }
-  } catch (error) {
-    console.error('강의 데이터 읽기 실패:', error)
-  }
-  return []
-}
-
-// 강의 데이터를 파일에 저장하기
-function saveCourses(courses: Course[]) {
-  try {
-    const dir = path.dirname(COURSES_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2))
-    return true
-  } catch (error) {
-    console.error('강의 데이터 저장 실패:', error)
-    return false
-  }
-}
-
-// JWT에서 사용자 정보 추출
-async function getCurrentUserFromRequest(request: NextRequest) {
-  const authToken = request.cookies.get('auth-token')?.value
-
-  if (!authToken) {
-    return null
-  }
-
-  const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-  const secret = new TextEncoder().encode(jwtSecret)
-
-  try {
-    const { payload } = await jwtVerify(authToken, secret)
-    return {
-      userId: payload.userId as string,
-      userType: payload.userType as string,
-      name: payload.name as string
-    }
-  } catch {
-    return null
-  }
-}
-
-function withCors(res: NextResponse) {
-  res.headers.set('Access-Control-Allow-Origin', '*')
-  res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS, GET')
-  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.headers.set('Cache-Control', 'no-store')
-  return res
-}
-
-export async function OPTIONS() {
-  return withCors(new NextResponse(null, { status: 204 }))
-}
-
-// Optional GET for liveness/debug checks
-export async function GET() {
-  return withCors(NextResponse.json({ ok: true, route: '/api/qr/generate', allows: ['POST'] }))
 }
 
 export async function POST(request: NextRequest) {
   try {
     console.log('QR generation API called')
 
-    // Check authentication using JWT from request
-    const user = await getCurrentUserFromRequest(request)
-    console.log('User authentication result:', user ? { userId: user.userId, userType: user.userType } : 'No user')
-
-    if (!user) {
-      return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
-    }
-
-    // Check if user is a professor
-    if (user.userType !== 'professor') {
-      return withCors(NextResponse.json({ error: 'Only professors can generate QR codes' }, { status: 403 }))
-    }
-
-    const body = await request.json()
-    const { courseId, expiresInMinutes = 30, classroomLocation } = body
-
-    if (!courseId) {
-      return withCors(NextResponse.json({ error: 'Course ID is required' }, { status: 400 }))
-    }
-
-    // 강의 데이터 확인 또는 생성
-    const courses = getCourses()
-    let course = courses.find((c) => c.id === courseId && c.professorId === user.userId)
-
-    if (!course) {
-      // 교수의 실제 위치가 전달되지 않은 경우 에러 처리
-      if (!classroomLocation || !classroomLocation.latitude || !classroomLocation.longitude) {
-        return withCors(NextResponse.json({
-          error: '강의실 위치 정보가 필요합니다. 위치 설정을 먼저 완료해주세요.'
-        }, { status: 400 }))
-      }
-
-      // 데모 강의 생성
-      const newCourse = {
-        id: courseId || `demo_${Date.now()}`,
-        professorId: user.userId,
-        name: '데모 강의',
-        courseCode: 'DEMO101',
-        description: '테스트용 강의입니다',
-        location: `위도: ${classroomLocation.latitude}, 경도: ${classroomLocation.longitude}`,
-        classroomLocation: {
-          latitude: classroomLocation.latitude,
-          longitude: classroomLocation.longitude,
-          radius: classroomLocation.radius || 100
-        },
-        totalSessions: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-
-      courses.push(newCourse)
-      saveCourses(courses)
-      course = newCourse
-
-      console.log('Demo course created, ID:', course.id)
-    }
-
-    // 실제 course ID 사용
-    const actualCourseId = course.id
-
-    // QR 코드 생성
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    const qrCodeValue = `${sessionId}_${actualCourseId}`
-    const expiresAt = new Date(Date.now() + (expiresInMinutes * 60 * 1000))
-    const today = new Date().toISOString().split('T')[0]
-
-    // 세션 데이터 읽기
-    const sessions = getSessions()
-
-    // 오늘 날짜의 기존 세션 찾기
-    let session = sessions.find((s: Session) =>
-      s.courseId === actualCourseId &&
-      s.date === today
+    // Supabase 클라이언트 생성 (서비스 역할 키 사용)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    if (session) {
-      // 기존 세션 업데이트
-      session.qrCode = qrCodeValue
-      session.qrCodeExpiresAt = expiresAt.toISOString()
-      session.status = 'active'
-      // 위치 정보가 전달되면 업데이트
-      if (classroomLocation) {
-        session.classroomLocation = classroomLocation
-      }
-      session.updatedAt = new Date().toISOString()
-    } else {
-      // 새 세션 생성
-      session = {
-        id: sessionId,
-        courseId: actualCourseId,
-        courseName: course.name,
-        courseCode: course.courseCode,
-        date: today,
-        qrCode: qrCodeValue,
-        qrCodeExpiresAt: expiresAt.toISOString(),
-        status: 'active',
-        classroomLocation: course.classroomLocation || classroomLocation,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-      sessions.push(session)
+    // 사용자 인증 확인
+    const user = await getCurrentUser()
+    console.log('User authentication result:', user)
+
+    if (!user || user.userType !== 'professor') {
+      return NextResponse.json(
+        { error: 'Unauthorized. Professor access required.' },
+        { status: 401 }
+      )
     }
 
-    // 세션 저장
-    saveSessions(sessions)
-    console.log('Session saved:', session)
+    // 요청 데이터 파싱
+    const { courseId, expiresInMinutes = 30, classroomLocation }: QRGenerateRequest = await request.json()
 
+    if (!courseId || !classroomLocation) {
+      return NextResponse.json(
+        { error: 'Missing required fields: courseId, classroomLocation' },
+        { status: 400 }
+      )
+    }
+
+    // 강의 정보 조회 또는 데모 강의 생성
+    let courseName = '데모 강의'
+    let courseCode = 'DEMO101'
+
+    if (courseId.startsWith('demo-course-')) {
+      // 데모 강의인 경우 기본 값 사용 (DB 조회 없이)
+      courseName = '데모 강의'
+      courseCode = 'DEMO101'
+    } else {
+      // 실제 강의인 경우 DB에서 조회
+      const { data: course, error: courseError } = await supabase
+        .from('courses')
+        .select('name, course_code')
+        .eq('id', courseId)
+        .eq('professor_id', user.userId)
+        .single()
+
+      if (courseError || !course) {
+        return NextResponse.json(
+          { error: 'Course not found or access denied' },
+          { status: 404 }
+        )
+      }
+
+      courseName = course.name
+      courseCode = course.course_code
+    }
+
+    // 현재 시간과 만료 시간 계산
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + expiresInMinutes * 60 * 1000)
+
+    // 세션을 Supabase에 저장 (UUID는 자동 생성됨)
+    // 데모 강의인 경우 course_id를 null로 설정
+    const sessionData: any = {
+      status: 'active',
+      date: now.toISOString().split('T')[0], // YYYY-MM-DD 형식
+      qr_code: 'placeholder', // 임시 플레이스홀더
+      qr_code_expires_at: expiresAt.toISOString(), // QR 코드 만료 시간 추가
+      updated_at: now.toISOString()
+    }
+
+    // 데모 강의가 아닌 경우에만 course_id 설정
+    if (!courseId.startsWith('demo-course-')) {
+      sessionData.course_id = courseId
+    } else {
+      // 데모 강의의 경우 실제 존재하는 강의 UUID 사용
+      sessionData.course_id = '27468faa-0394-41bf-871a-a4079e9dee79'
+    }
+
+    // 먼저 세션을 생성해서 ID를 얻은 후 QR 코드 생성
+    const { data: session, error: sessionError } = await supabase
+      .from('class_sessions')
+      .insert(sessionData)
+      .select('id')
+      .single()
+
+    if (sessionError) {
+      console.error('세션 저장 실패:', sessionError)
+      return NextResponse.json(
+        { error: 'Failed to create session: ' + sessionError.message },
+        { status: 500 }
+      )
+    }
+
+    const sessionId = session.id
+
+    // 실제 QR 코드 문자열 생성 (학생이 스캔할 URL)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'
+    const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`
+
+    // 생성된 세션의 qr_code 필드 업데이트
+    const { error: updateError } = await supabase
+      .from('class_sessions')
+      .update({ qr_code: qrCodeString })
+      .eq('id', sessionId)
+
+    if (updateError) {
+      console.error('QR 코드 업데이트 실패:', updateError)
+      // 세션은 생성되었으므로 계속 진행
+    }
+
+    // QR 데이터 생성
     const qrData = {
-      sessionId: session.id,
-      courseId: actualCourseId,
-      expiresAt: session.qrCodeExpiresAt,
+      sessionId: sessionId,
+      courseId: courseId,
+      expiresAt: expiresAt.toISOString(),
       type: 'attendance' as const
     }
 
-    return withCors(NextResponse.json({
-      success: true,
-      qrData,
-      qrCode: qrCodeValue,
-      expiresAt: session.qrCodeExpiresAt
-    }))
-  } catch (error) {
-    console.error('QR generation API error:', error)
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
-    console.error('Error details:', {
-      name: error instanceof Error ? error.name : 'Unknown',
-      message: error instanceof Error ? error.message : String(error)
+    console.log('Session saved:', {
+      id: sessionId,
+      courseId,
+      courseName,
+      courseCode,
+      date: now.toISOString().split('T')[0],
+      qrCode: qrCodeString,
+      qrCodeExpiresAt: expiresAt.toISOString(),
+      status: 'active',
+      classroomLocation,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
     })
 
-    return withCors(NextResponse.json({
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }))
+    // 성공 응답
+    return NextResponse.json({
+      success: true,
+      qrData,
+      qrCode: qrCodeString,
+      expiresAt: expiresAt.toISOString(),
+      courseName,
+      courseCode
+    })
+
+  } catch (error) {
+    console.error('QR generation error:', error)
+    return NextResponse.json(
+      {
+        error: 'Internal server error during QR generation',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    )
   }
 }
