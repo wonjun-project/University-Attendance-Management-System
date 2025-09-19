@@ -147,6 +147,7 @@ function LocationSelector({
               <div className={selectedType !== 'predefined' ? 'opacity-50 pointer-events-none' : ''}>
                 <PredefinedLocations
                   onLocationSelect={handlePredefinedLocationSelect}
+                  selectedLocationId={value?.predefinedLocationId ?? null}
                   disabled={disabled || selectedType !== 'predefined'}
                 />
               </div>

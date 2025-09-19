@@ -54,7 +54,10 @@ export default function QRCodePage() {
           classroomLocation: {
             latitude: locationData.latitude,
             longitude: locationData.longitude,
-            radius: locationData.radius
+            radius: locationData.radius,
+            locationType: locationData.locationType,
+            predefinedLocationId: locationData.predefinedLocationId ?? null,
+            displayName: locationData.displayName ?? undefined
           }
         })
       })

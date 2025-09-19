@@ -6,14 +6,28 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+type LocationType = 'predefined' | 'current'
+
 interface QRGenerateRequest {
   courseId: string
   expiresInMinutes?: number
   classroomLocation: {
-    latitude: number
-    longitude: number
-    radius: number
+    latitude?: number | string | null
+    longitude?: number | string | null
+    radius?: number | string | null
+    locationType?: LocationType
+    predefinedLocationId?: string | null
+    displayName?: string | null
   }
+}
+
+interface NormalizedLocation {
+  latitude: number
+  longitude: number
+  radius: number
+  locationType: LocationType
+  predefinedLocationId: string | null
+  displayName?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -37,8 +51,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 요청 데이터 파싱
-    const { courseId, expiresInMinutes = 30, classroomLocation }: QRGenerateRequest = await request.json()
+    // 요청 데이터 파싱 및 위치 정규화
+    const payload: QRGenerateRequest = await request.json()
+    const { courseId, expiresInMinutes = 30, classroomLocation } = payload
 
     if (!courseId || !classroomLocation) {
       return NextResponse.json(
@@ -46,6 +61,88 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const toNumber = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === '') {
+        return null
+      }
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null
+      }
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    const locationType: LocationType = classroomLocation.locationType === 'current' ? 'current' : 'predefined'
+    let normalizedLocation: NormalizedLocation | null = null
+
+    if (locationType === 'predefined' && classroomLocation.predefinedLocationId) {
+      const { data: predefinedLocation, error: predefinedError } = await supabase
+        .from('predefined_locations')
+        .select('id, latitude, longitude, radius, display_name, is_active')
+        .eq('id', classroomLocation.predefinedLocationId)
+        .maybeSingle()
+
+      if (predefinedError) {
+        console.warn('⚠️ Failed to resolve predefined location, fallback to client payload:', predefinedError.message)
+      }
+
+      if (predefinedLocation && predefinedLocation.is_active !== false) {
+        const lat = toNumber(predefinedLocation.latitude)
+        const lon = toNumber(predefinedLocation.longitude)
+        const rad = toNumber(predefinedLocation.radius)
+
+        if (lat !== null && lon !== null) {
+          normalizedLocation = {
+            latitude: lat,
+            longitude: lon,
+            radius: rad ?? 100,
+            locationType: 'predefined',
+            predefinedLocationId: predefinedLocation.id,
+            displayName: predefinedLocation.display_name ?? undefined
+          }
+        }
+      }
+    }
+
+    const fallbackLat = toNumber(classroomLocation.latitude)
+    const fallbackLon = toNumber(classroomLocation.longitude)
+    const fallbackRadius = toNumber(classroomLocation.radius)
+
+    if (!normalizedLocation) {
+      if (fallbackLat === null || fallbackLon === null) {
+        return NextResponse.json(
+          { error: 'Invalid classroom location. latitude/longitude are required.' },
+          { status: 400 }
+        )
+      }
+
+      normalizedLocation = {
+        latitude: fallbackLat,
+        longitude: fallbackLon,
+        radius: fallbackRadius ?? 100,
+        locationType,
+        predefinedLocationId: locationType === 'predefined' ? classroomLocation.predefinedLocationId ?? null : null,
+        displayName: classroomLocation.displayName ?? undefined
+      }
+    } else {
+      normalizedLocation = {
+        ...normalizedLocation,
+        radius: fallbackRadius ?? normalizedLocation.radius,
+        locationType,
+        predefinedLocationId: locationType === 'predefined' ? classroomLocation.predefinedLocationId ?? normalizedLocation.predefinedLocationId : null,
+        displayName: classroomLocation.displayName ?? normalizedLocation.displayName
+      }
+    }
+
+    if (!normalizedLocation) {
+      return NextResponse.json(
+        { error: 'Failed to normalize classroom location.' },
+        { status: 400 }
+      )
+    }
+
+    normalizedLocation.radius = Math.max(10, Math.round(normalizedLocation.radius))
 
     // 강의 정보 조회 또는 데모 강의 생성
     let courseName = '데모 강의'
@@ -81,14 +178,14 @@ export async function POST(request: NextRequest) {
 
     // 세션을 Supabase에 저장 (UUID는 자동 생성됨)
     // 데모 강의인 경우 course_id를 null로 설정
-    const sessionData: any = {
+    const sessionData: Record<string, unknown> = {
       status: 'active',
       date: now.toISOString().split('T')[0], // YYYY-MM-DD 형식
       qr_code: 'placeholder', // 임시 플레이스홀더
       qr_code_expires_at: expiresAt.toISOString(), // QR 코드 만료 시간 추가
-      classroom_latitude: classroomLocation.latitude,
-      classroom_longitude: classroomLocation.longitude,
-      classroom_radius: classroomLocation.radius || 100, // 기본 반경 100m
+      classroom_latitude: normalizedLocation.latitude,
+      classroom_longitude: normalizedLocation.longitude,
+      classroom_radius: normalizedLocation.radius,
       updated_at: now.toISOString()
     }
 
@@ -149,10 +246,56 @@ export async function POST(request: NextRequest) {
       qrCode: qrCodeString,
       qrCodeExpiresAt: expiresAt.toISOString(),
       status: 'active',
-      classroomLocation,
+      classroomLocation: normalizedLocation,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString()
     })
+
+    // 로컬 개발 환경용 세션 JSON 업데이트 (실패해도 무시)
+    try {
+      const fs = (await import('fs')).default
+      const path = (await import('path')).default
+      const sessionsFilePath = path.join(process.cwd(), 'data', 'sessions.json')
+
+      if (fs.existsSync(sessionsFilePath)) {
+        const raw = fs.readFileSync(sessionsFilePath, 'utf-8')
+        let sessions: any[] = []
+        try {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) {
+            sessions = parsed
+          }
+        } catch (parseError) {
+          console.warn('⚠️ Failed to parse sessions.json. Recreating file.', parseError)
+        }
+
+        const filtered = sessions.filter(sessionItem => sessionItem?.id !== sessionId)
+        filtered.push({
+          id: sessionId,
+          courseId,
+          courseName,
+          courseCode,
+          date: now.toISOString().split('T')[0],
+          qrCode: qrCodeString,
+          qrCodeExpiresAt: expiresAt.toISOString(),
+          status: 'active',
+          classroomLocation: {
+            latitude: normalizedLocation.latitude,
+            longitude: normalizedLocation.longitude,
+            radius: normalizedLocation.radius,
+            locationType: normalizedLocation.locationType,
+            predefinedLocationId: normalizedLocation.predefinedLocationId,
+            displayName: normalizedLocation.displayName
+          },
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString()
+        })
+
+        fs.writeFileSync(sessionsFilePath, JSON.stringify(filtered, null, 2))
+      }
+    } catch (fileError) {
+      console.warn('⚠️ Unable to update local sessions.json:', fileError instanceof Error ? fileError.message : fileError)
+    }
 
     // 성공 응답
     return NextResponse.json({
@@ -161,7 +304,8 @@ export async function POST(request: NextRequest) {
       qrCode: qrCodeString,
       expiresAt: expiresAt.toISOString(),
       courseName,
-      courseCode
+      courseCode,
+      classroomLocation: normalizedLocation
     })
 
   } catch (error) {

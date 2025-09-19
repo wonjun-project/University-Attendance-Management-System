@@ -36,10 +36,14 @@ export async function GET(
         qr_code,
         qr_code_expires_at,
         status,
+        classroom_latitude,
+        classroom_longitude,
+        classroom_radius,
         courses (
           id,
           name,
-          course_code
+          course_code,
+          classroom_location
         )
       `)
       .eq('id', sessionId)
@@ -63,6 +67,87 @@ export async function GET(
 
     const course = session.courses as any
 
+    const parseLocation = (value: unknown) => {
+      if (!value) return null
+
+      let raw = value
+      if (typeof raw === 'string') {
+        try {
+          raw = JSON.parse(raw)
+        } catch {
+          return null
+        }
+      }
+
+      if (typeof raw !== 'object' || raw === null) {
+        return null
+      }
+
+      const candidate = raw as Record<string, unknown>
+      const latRaw = candidate.latitude ?? candidate.lat
+      const lonRaw = candidate.longitude ?? candidate.lng ?? candidate.lon
+      const radiusRaw = candidate.radius ?? candidate.radiusMeters ?? candidate.allowedRadius
+      const displayNameRaw = candidate.displayName ?? candidate.name ?? candidate.label
+      const locationTypeRaw = candidate.locationType ?? candidate.location_type ?? candidate.type
+      const predefinedRaw = candidate.predefinedLocationId ?? candidate.predefined_location_id
+
+      if (latRaw === null || latRaw === undefined || latRaw === '') {
+        return null
+      }
+
+      if (lonRaw === null || lonRaw === undefined || lonRaw === '') {
+        return null
+      }
+
+      const lat = typeof latRaw === 'number' ? latRaw : Number(latRaw)
+      const lon = typeof lonRaw === 'number' ? lonRaw : Number(lonRaw)
+      const radiusValue = typeof radiusRaw === 'number' ? radiusRaw : Number(radiusRaw)
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return null
+      }
+
+      const radius = Number.isFinite(radiusValue) && radiusValue > 0 ? radiusValue : undefined
+      const displayName = typeof displayNameRaw === 'string' && displayNameRaw.length > 0 ? displayNameRaw : undefined
+      const locationType = locationTypeRaw === 'current' ? 'current' : locationTypeRaw === 'predefined' ? 'predefined' : undefined
+      const predefinedLocationId = typeof predefinedRaw === 'string' && predefinedRaw.length > 0 ? predefinedRaw : null
+
+      return {
+        latitude: lat,
+        longitude: lon,
+        radius,
+        displayName,
+        locationType,
+        predefinedLocationId
+      }
+    }
+
+    let classroomLocation = parseLocation({
+      latitude: (session as any).classroom_latitude ?? null,
+      longitude: (session as any).classroom_longitude ?? null,
+      radius: (session as any).classroom_radius ?? null,
+      locationType: (session as any).classroom_location_type ?? undefined,
+      predefinedLocationId: (session as any).predefined_location_id ?? null,
+      displayName: (session as any).classroom_display_name ?? undefined
+    })
+
+    if (!classroomLocation) {
+      classroomLocation = parseLocation(course?.classroom_location ?? null)
+    }
+
+    if (!classroomLocation) {
+      classroomLocation = {
+        latitude: 37.5665,
+        longitude: 126.9780,
+        radius: 100,
+        displayName: '기본 강의실 위치',
+        locationType: 'predefined' as const,
+        predefinedLocationId: null
+      }
+    }
+
+    const locationRadius = classroomLocation.radius ?? 100
+
     // 응답 데이터 구성 (기존 형식 호환)
     const responseData = {
       session: {
@@ -76,10 +161,12 @@ export async function GET(
         status: session.status,
         date: session.date,
         location: {
-          lat: 37.5665, // 기본값 - 실제로는 세션 생성 시 저장된 위치 사용
-          lng: 126.9780,
-          address: '강의실 위치',
-          radius: 50
+          lat: classroomLocation.latitude,
+          lng: classroomLocation.longitude,
+          radius: locationRadius,
+          address: classroomLocation.displayName ?? '강의실 위치',
+          locationType: classroomLocation.locationType ?? 'predefined',
+          predefinedLocationId: classroomLocation.predefinedLocationId
         },
         isActive: session.status === 'active'
       }

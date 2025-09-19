@@ -75,6 +75,9 @@ export async function POST(request: NextRequest) {
         course_id,
         qr_code_expires_at,
         status,
+        classroom_latitude,
+        classroom_longitude,
+        classroom_radius,
         courses (
           id,
           name,
@@ -178,18 +181,42 @@ export async function POST(request: NextRequest) {
       }
 
       const candidate = rawLocation as Record<string, unknown>
-      const lat = Number(candidate.latitude ?? candidate.lat)
-      const lon = Number(candidate.longitude ?? candidate.lng ?? candidate.lon)
-      const radiusValue = Number(candidate.radius)
+
+      const latRaw = candidate.latitude ?? candidate.lat
+      const lonRaw = candidate.longitude ?? candidate.lng ?? candidate.lon
+      const radiusRaw = candidate.radius ?? candidate.radiusMeters ?? candidate.allowedRadius
+      const locationTypeRaw = candidate.locationType ?? candidate.location_type ?? candidate.type
+      const predefinedIdRaw = candidate.predefinedLocationId ?? candidate.predefined_location_id ?? candidate.locationId
+      const displayNameRaw = candidate.displayName ?? candidate.name ?? candidate.label
+
+      if (latRaw === null || latRaw === undefined || latRaw === '') {
+        return null
+      }
+
+      if (lonRaw === null || lonRaw === undefined || lonRaw === '') {
+        return null
+      }
+
+      const lat = typeof latRaw === 'number' ? latRaw : Number(latRaw)
+      const lon = typeof lonRaw === 'number' ? lonRaw : Number(lonRaw)
+      const radiusValue = typeof radiusRaw === 'number' ? radiusRaw : Number(radiusRaw)
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
         return null
       }
 
+      const radius = Number.isFinite(radiusValue) && radiusValue > 0 ? radiusValue : undefined
+      const locationType = locationTypeRaw === 'current' ? 'current' : locationTypeRaw === 'predefined' ? 'predefined' : undefined
+      const predefinedLocationId = typeof predefinedIdRaw === 'string' && predefinedIdRaw.length > 0 ? predefinedIdRaw : null
+      const displayName = typeof displayNameRaw === 'string' && displayNameRaw.length > 0 ? displayNameRaw : undefined
+
       return {
         latitude: lat,
         longitude: lon,
-        radius: Number.isFinite(radiusValue) && radiusValue > 0 ? radiusValue : undefined
+        radius,
+        locationType,
+        predefinedLocationId,
+        displayName
       }
     }
 
@@ -220,10 +247,13 @@ export async function POST(request: NextRequest) {
     const normalizedClassroomLocation = {
       latitude: classroomLocation.latitude,
       longitude: classroomLocation.longitude,
-      radius: locationRadius
+      radius: locationRadius,
+      locationType: classroomLocation.locationType ?? 'predefined',
+      predefinedLocationId: classroomLocation.predefinedLocationId ?? null,
+      displayName: classroomLocation.displayName
     }
 
-    console.log(`강의실: (${normalizedClassroomLocation.latitude}, ${normalizedClassroomLocation.longitude}) 반경 ${normalizedClassroomLocation.radius}m`)
+    console.log(`강의실: (${normalizedClassroomLocation.latitude}, ${normalizedClassroomLocation.longitude}) 반경 ${normalizedClassroomLocation.radius}m [${normalizedClassroomLocation.locationType}]`)
     console.log(`GPS 정확도: ${acc}m`)
 
     // 학생 위치와 강의실 위치 간 거리 계산
@@ -268,7 +298,11 @@ export async function POST(request: NextRequest) {
           studentLocation: { lat, lon },
           classroomLocation: {
             latitude: normalizedClassroomLocation.latitude,
-            longitude: normalizedClassroomLocation.longitude
+            longitude: normalizedClassroomLocation.longitude,
+            radius: normalizedClassroomLocation.radius,
+            locationType: normalizedClassroomLocation.locationType,
+            predefinedLocationId: normalizedClassroomLocation.predefinedLocationId,
+            displayName: normalizedClassroomLocation.displayName
           }
         }
       }, { status: 400 })
