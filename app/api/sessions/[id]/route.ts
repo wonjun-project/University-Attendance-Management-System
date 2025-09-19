@@ -67,7 +67,16 @@ export async function GET(
 
     const course = session.courses as any
 
-    const parseLocation = (value: unknown) => {
+    interface ParsedClassroomLocation {
+      latitude: number
+      longitude: number
+      radius?: number
+      displayName?: string
+      locationType?: 'predefined' | 'current'
+      predefinedLocationId?: string | null
+    }
+
+    const parseLocation = (value: unknown): ParsedClassroomLocation | null => {
       if (!value) return null
 
       let raw = value
@@ -122,7 +131,7 @@ export async function GET(
       }
     }
 
-    let classroomLocation = parseLocation({
+    let classroomLocation: ParsedClassroomLocation | null = parseLocation({
       latitude: (session as any).classroom_latitude ?? null,
       longitude: (session as any).classroom_longitude ?? null,
       radius: (session as any).classroom_radius ?? null,

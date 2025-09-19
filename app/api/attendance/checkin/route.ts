@@ -164,7 +164,16 @@ export async function POST(request: NextRequest) {
     // 세션에 저장된 강의실 위치 정보 사용 (없으면 코스 정보 → 기본값 순으로 폴백)
     const sessionAny = session as any
 
-    const parseLocation = (value: unknown) => {
+    interface ParsedClassroomLocation {
+      latitude: number
+      longitude: number
+      radius?: number
+      locationType?: 'predefined' | 'current'
+      predefinedLocationId?: string | null
+      displayName?: string
+    }
+
+    const parseLocation = (value: unknown): ParsedClassroomLocation | null => {
       if (!value) return null
 
       let rawLocation = value
@@ -220,9 +229,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let classroomLocation = classroomLocationData as
-      | { latitude: number; longitude: number; radius?: number }
-      | null
+    let classroomLocation = classroomLocationData as ParsedClassroomLocation | null
 
     if (!classroomLocation) {
       classroomLocation = parseLocation({
@@ -239,7 +246,11 @@ export async function POST(request: NextRequest) {
     if (!classroomLocation) {
       classroomLocation = {
         latitude: 37.5665,
-        longitude: 126.9780
+        longitude: 126.9780,
+        radius: 100,
+        locationType: 'predefined',
+        predefinedLocationId: null,
+        displayName: '기본 강의실 위치'
       }
     }
 
