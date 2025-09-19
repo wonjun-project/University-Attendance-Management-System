@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { finalizeAttendanceRecords, markSessionEnded } from '@/lib/session/session-service'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -78,70 +79,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     console.log(`🏁 세션 종료 시작: ${course.name} (${sessionId})`);
 
-    // 4. 세션 상태를 'ended'로 변경
-    const { error: updateError } = await supabase
-      .from('class_sessions')
-      .update({
-        status: 'ended',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', sessionId);
+    // 4. 세션 상태를 'ended'로 변경하고 출석 데이터 정리
+    const { endedAt } = await markSessionEnded(supabase, sessionId)
+    const { stats } = await finalizeAttendanceRecords(supabase, sessionId)
 
-    if (updateError) {
-      console.error('세션 상태 업데이트 실패:', updateError);
-      return NextResponse.json(
-        { error: '세션 종료 중 오류가 발생했습니다.' },
-        { status: 500 }
-      );
-    }
-
-    // 5. 해당 세션의 모든 출석 기록 조회
-    const { data: attendances, error: attendanceError } = await supabase
-      .from('attendances')
-      .select('id, student_id, status')
-      .eq('session_id', sessionId);
-
-    if (attendanceError) {
-      console.warn('출석 기록 조회 실패:', attendanceError);
-    }
-
-    // 6. 통계 계산
-    const stats = {
-      total: attendances?.length || 0,
-      present: attendances?.filter(a => a.status === 'present').length || 0,
-      late: attendances?.filter(a => a.status === 'late').length || 0,
-      absent: attendances?.filter(a => a.status === 'absent').length || 0,
-      left_early: attendances?.filter(a => a.status === 'left_early').length || 0,
-      attendance_rate: 0
-    };
-
-    stats.attendance_rate = stats.total > 0
-      ? Math.round(((stats.present + stats.late) / stats.total) * 100)
-      : 0;
-
-    console.log('📊 수업 종료 통계:', stats);
-
-    // 7. 최종 출석 상태 확정 (필요 시 추가 로직)
-    // 예: 'present' 상태인 학생들의 check_out_time 업데이트
-    if (attendances && attendances.length > 0) {
-      const presentStudents = attendances.filter(a => a.status === 'present');
-
-      if (presentStudents.length > 0) {
-        const { error: checkoutError } = await supabase
-          .from('attendances')
-          .update({
-            check_out_time: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .in('id', presentStudents.map(s => s.id));
-
-        if (checkoutError) {
-          console.warn('체크아웃 시간 업데이트 실패:', checkoutError);
-        } else {
-          console.log(`✅ ${presentStudents.length}명 학생 체크아웃 처리 완료`);
-        }
-      }
-    }
+    console.log('📊 수업 종료 통계:', stats)
 
     console.log(`🏁 세션 종료 완료: ${course.name} (${sessionId})`);
 
@@ -151,7 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       message: '수업이 성공적으로 종료되었습니다.',
       sessionId: sessionId,
       courseName: course.name,
-      endedAt: new Date().toISOString(),
+      endedAt,
       statistics: {
         ...stats,
         attendance_rate: `${stats.attendance_rate}%`

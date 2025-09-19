@@ -12,6 +12,9 @@ interface SessionInfo {
   sessionId: string
   courseId: string
   courseName: string
+  status: 'scheduled' | 'active' | 'ended'
+  autoEnded?: boolean
+  autoEndAt?: string | null
   location: {
     lat: number
     lng: number
@@ -147,10 +150,16 @@ export default function AttendancePage() {
         sessionId: sessionInfo.id,
         courseId: sessionInfo.courseId,
         courseName: sessionInfo.courseName,
+        status: sessionInfo.status,
+        autoEnded: sessionInfo.autoEnded,
+        autoEndAt: sessionInfo.autoEndAt,
         location: sessionInfo.location,
         expiresAt: sessionInfo.expiresAt,
         attendanceUrl: `/student/attendance/${sessionInfo.id}`,
       })
+      if (sessionInfo.status !== 'active') {
+        setSessionEnded(true)
+      }
 
       const attendanceResponse = await fetch(`/api/attendance/student-status?sessionId=${sessionId}`)
       const attendancePayload = await attendanceResponse.json()
@@ -162,15 +171,20 @@ export default function AttendancePage() {
           sessionId,
         })
 
-        if (attendancePayload.attendance.status === 'present') {
+        if (attendancePayload.session.isActive && attendancePayload.attendance.status === 'present') {
           await startHeartbeatTracking(attendancePayload.attendance.id)
         }
+      }
+
+      if (!attendancePayload.session.isActive) {
+        setSessionEnded(true)
+        stopHeartbeatTracking()
       }
     } catch (error) {
       console.error('데이터 가져오기 실패:', error)
       setLocationError(error instanceof Error ? error.message : '정보를 가져올 수 없습니다.')
     }
-  }, [sessionId, startHeartbeatTracking])
+  }, [sessionId, startHeartbeatTracking, stopHeartbeatTracking])
 
   useEffect(() => {
     if (sessionId) {
@@ -289,14 +303,22 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {sessionEnded && (
+              {sessionEnded && sessionData && (
                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                   <h3 className="font-semibold text-gray-700">
                     🏁 수업이 종료되었습니다
                   </h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    교수님이 수업을 종료하여 위치 추적이 중지되었습니다. 출석 상태가 최종 확정되었습니다.
+                    {sessionData.autoEnded
+                      ? '수업 시작 후 2시간이 지남에 따라 자동으로 종료되었습니다.'
+                      : '교수님이 수업을 종료하여 위치 추적이 중지되었습니다.'}
+                    {' '}출석 상태가 최종 확정되었습니다.
                   </p>
+                  {sessionData.autoEndAt && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      자동 종료 시각: {new Date(sessionData.autoEndAt).toLocaleString('ko-KR')}
+                    </p>
+                  )}
                 </div>
               )}
 

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { autoEndSessionIfNeeded } from '@/lib/session/session-service'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -67,6 +68,8 @@ export async function POST(request: NextRequest) {
         session_id,
         class_sessions!session_id (
           id,
+          created_at,
+          updated_at,
           status,
           course_id,
           courses!course_id (
@@ -89,13 +92,30 @@ export async function POST(request: NextRequest) {
       ? attendanceData.class_sessions[0]
       : attendanceData.class_sessions;
 
-    if (!session || session.status === 'ended') {
+    const autoEndResult = session
+      ? await autoEndSessionIfNeeded(supabase, {
+          id: session.id,
+          status: session.status,
+          created_at: session.created_at ?? null,
+          updated_at: session.updated_at ?? null,
+          course_id: session.course_id
+        })
+      : { session, autoEnded: false, autoEndAt: null }
+
+    if (!session || autoEndResult.session.status === 'ended') {
       console.log('🏁 수업이 종료되어 heartbeat 중지');
       return NextResponse.json({
         success: true,
         sessionEnded: true,
+        autoEnded: autoEndResult.autoEnded,
         message: '수업이 종료되었습니다.'
       });
+    }
+
+    const normalizedSession = {
+      ...session,
+      status: autoEndResult.session.status,
+      updated_at: autoEndResult.session.updated_at
     }
 
     // 3. 출석 상태 확인 (present가 아니면 heartbeat 중지)
@@ -107,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 강의실 위치 정보 추출
-    const course = Array.isArray(session.courses) ? session.courses[0] : session.courses;
+    const course = Array.isArray(normalizedSession.courses) ? normalizedSession.courses[0] : normalizedSession.courses;
     const classroomLocation = course?.classroom_location as {
       latitude: number;
       longitude: number;

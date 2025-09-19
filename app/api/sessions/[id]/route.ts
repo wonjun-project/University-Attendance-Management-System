@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { autoEndSessionIfNeeded, calculateAutoEndAt } from '@/lib/session/session-service'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,6 +33,8 @@ export async function GET(
       .select(`
         id,
         course_id,
+        created_at,
+        updated_at,
         date,
         qr_code,
         qr_code_expires_at,
@@ -57,15 +60,21 @@ export async function GET(
       )
     }
 
-    // 세션 만료 확인
-    if (new Date() > new Date(session.qr_code_expires_at)) {
-      return NextResponse.json(
-        { error: '만료된 세션입니다.' },
-        { status: 410 }
-      )
+    const autoEndResult = await autoEndSessionIfNeeded(supabase, {
+      id: session.id,
+      status: session.status,
+      created_at: (session as any).created_at ?? null,
+      updated_at: (session as any).updated_at ?? null,
+      course_id: session.course_id
+    })
+
+    const normalizedSession = {
+      ...session,
+      status: autoEndResult.session.status,
+      updated_at: autoEndResult.session.updated_at
     }
 
-    const course = session.courses as any
+    const course = normalizedSession.courses as any
 
     interface ParsedClassroomLocation {
       latitude: number
@@ -132,12 +141,12 @@ export async function GET(
     }
 
     let classroomLocation: ParsedClassroomLocation | null = parseLocation({
-      latitude: (session as any).classroom_latitude ?? null,
-      longitude: (session as any).classroom_longitude ?? null,
-      radius: (session as any).classroom_radius ?? null,
-      locationType: (session as any).classroom_location_type ?? undefined,
-      predefinedLocationId: (session as any).predefined_location_id ?? null,
-      displayName: (session as any).classroom_display_name ?? undefined
+      latitude: (normalizedSession as any).classroom_latitude ?? null,
+      longitude: (normalizedSession as any).classroom_longitude ?? null,
+      radius: (normalizedSession as any).classroom_radius ?? null,
+      locationType: (normalizedSession as any).classroom_location_type ?? undefined,
+      predefinedLocationId: (normalizedSession as any).predefined_location_id ?? null,
+      displayName: (normalizedSession as any).classroom_display_name ?? undefined
     })
 
     if (!classroomLocation) {
@@ -158,17 +167,19 @@ export async function GET(
     const locationRadius = classroomLocation.radius ?? 100
 
     // 응답 데이터 구성 (기존 형식 호환)
+    const autoEndInfo = calculateAutoEndAt((normalizedSession as any).created_at ?? null)
+
     const responseData = {
       session: {
-        id: session.id,
-        courseId: session.course_id,
-        course_id: session.course_id, // 레거시 호환성
+        id: normalizedSession.id,
+        courseId: normalizedSession.course_id,
+        course_id: normalizedSession.course_id, // 레거시 호환성
         courseName: course?.name || '데모 강의',
         courseCode: course?.course_code || 'DEMO101',
-        qr_code_expires_at: session.qr_code_expires_at, // 레거시 호환성
-        expiresAt: session.qr_code_expires_at,
-        status: session.status,
-        date: session.date,
+        qr_code_expires_at: normalizedSession.qr_code_expires_at, // 레거시 호환성
+        expiresAt: normalizedSession.qr_code_expires_at,
+        status: normalizedSession.status,
+        date: normalizedSession.date,
         location: {
           lat: classroomLocation.latitude,
           lng: classroomLocation.longitude,
@@ -177,7 +188,9 @@ export async function GET(
           locationType: classroomLocation.locationType ?? 'predefined',
           predefinedLocationId: classroomLocation.predefinedLocationId
         },
-        isActive: session.status === 'active'
+        isActive: normalizedSession.status === 'active',
+        autoEnded: autoEndResult.autoEnded,
+        autoEndAt: autoEndInfo.autoEndAt
       }
     }
 

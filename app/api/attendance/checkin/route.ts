@@ -1,6 +1,7 @@
 import { getCurrentUser } from '@/lib/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { autoEndSessionIfNeeded } from '@/lib/session/session-service'
 
 // Haversine 공식을 이용한 두 지점 간 거리 계산 (미터 단위)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -73,6 +74,8 @@ export async function POST(request: NextRequest) {
       .select(`
         id,
         course_id,
+        created_at,
+        updated_at,
         qr_code_expires_at,
         status,
         classroom_latitude,
@@ -91,6 +94,28 @@ export async function POST(request: NextRequest) {
     if (sessionError || !session) {
       console.error('Session not found:', sessionError)
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+    }
+
+    const autoEndResult = await autoEndSessionIfNeeded(supabase, {
+      id: session.id,
+      status: session.status,
+      created_at: (session as any).created_at ?? null,
+      updated_at: (session as any).updated_at ?? null,
+      course_id: session.course_id
+    })
+
+    const normalizedSession = {
+      ...session,
+      status: autoEndResult.session.status,
+      updated_at: autoEndResult.session.updated_at
+    }
+
+    if (autoEndResult.autoEnded || normalizedSession.status === 'ended') {
+      return NextResponse.json({
+        error: 'Session has already ended.',
+        sessionEnded: true,
+        autoEnded: autoEndResult.autoEnded
+      }, { status: 400 })
     }
 
     // 로컬 파일에서 위치 정보 가져오기 (개발 환경용)
@@ -113,12 +138,12 @@ export async function POST(request: NextRequest) {
     console.log(`학생: ${user.name} (${user.userId})`)
     console.log(`위치: (${lat}, ${lon}) ±${acc}m`)
 
-    if (session.status !== 'active') {
+    if (normalizedSession.status !== 'active') {
       return NextResponse.json({ error: 'Session is not active' }, { status: 400 })
     }
 
     // 만료 시간 확인
-    const expiresAt = new Date(session.qr_code_expires_at)
+    const expiresAt = new Date(normalizedSession.qr_code_expires_at)
     const currentTime = new Date()
     console.log('QR 만료 시간 체크:')
     console.log('  - 만료 시간:', expiresAt.toISOString())
@@ -129,7 +154,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: 'QR code has expired',
         debug: {
-          expiresAt: session.qr_code_expires_at,
+          expiresAt: normalizedSession.qr_code_expires_at,
           currentTime: currentTime.toISOString(),
           expired: true
         }
@@ -140,17 +165,17 @@ export async function POST(request: NextRequest) {
     const { data: enrollment } = await supabase
       .from('course_enrollments')
       .select('id')
-      .eq('course_id', session.course_id)
+      .eq('course_id', normalizedSession.course_id)
       .eq('student_id', user.userId)
       .single()
 
     if (!enrollment) {
       // 자동 등록 (MVP용)
-      console.log(`자동 등록 진행: ${user.userId} -> ${session.course_id}`)
+      console.log(`자동 등록 진행: ${user.userId} -> ${normalizedSession.course_id}`)
       const { error: enrollError } = await supabase
         .from('course_enrollments')
         .insert({
-          course_id: session.course_id,
+          course_id: normalizedSession.course_id,
           student_id: user.userId,
           enrolled_at: new Date().toISOString()
         })
@@ -162,7 +187,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 세션에 저장된 강의실 위치 정보 사용 (없으면 코스 정보 → 기본값 순으로 폴백)
-    const sessionAny = session as any
+    const sessionAny = normalizedSession as any
 
     interface ParsedClassroomLocation {
       latitude: number
