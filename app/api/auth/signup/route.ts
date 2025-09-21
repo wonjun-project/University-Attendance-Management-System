@@ -1,171 +1,152 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
-import * as fs from 'fs'
-import * as path from 'path'
-
-// 간단한 파일 기반 저장소 경로
-const USERS_FILE = path.join(process.cwd(), 'data', 'users.json')
+import { hashPassword, authenticateStudent, authenticateProfessor } from '@/lib/auth'
+import { createServiceClient } from '@/lib/supabase-admin'
 
 type UserRole = 'student' | 'professor'
 
-interface StoredUser {
-  id: string
+interface SignupRequest {
   name: string
   password: string
-  type: UserRole
+  userType: UserRole
+  studentId?: string
+  professorId?: string
 }
 
-interface UsersData {
-  students: Record<string, StoredUser>
-  professors: Record<string, StoredUser>
-}
-
-// 사용자 데이터를 파일에서 읽어오기
-function getUsers(): UsersData {
-  try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf-8')
-      return JSON.parse(data) as UsersData
-    }
-  } catch (error) {
-    console.error('사용자 데이터 읽기 실패:', error)
-  }
-
-  // 기본 테스트 계정
-  return {
-    students: {
-      'stu001': {
-        id: 'stu001',
-        name: '테스트 학생',
-        password: 'password123',
-        type: 'student'
-      }
-    },
-    professors: {
-      'prof001': {
-        id: 'prof001',
-        name: '테스트 교수',
-        password: 'password123',
-        type: 'professor'
-      }
-    }
-  }
-}
-
-// 사용자 데이터를 파일에 저장하기
-function saveUsers(users: UsersData) {
-  try {
-    const dir = path.dirname(USERS_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2))
-    return true
-  } catch (error) {
-    console.error('사용자 데이터 저장 실패:', error)
-    return false
-  }
-}
+const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7
 
 export async function POST(request: NextRequest) {
   try {
-    const { studentId, professorId, name, password, userType } = await request.json()
+    const body = (await request.json()) as Partial<SignupRequest>
+    const { name, password, userType } = body
 
-    // userType에 따라 적절한 ID 선택
-    const id = userType === 'student' ? studentId : professorId
-
-    console.log('회원가입 시도:', { id, name, userType })
-
-    // 입력값 검증
-    if (!id || !name || !password || !userType) {
-      return NextResponse.json(
-        { error: '모든 필드를 입력해주세요' },
-        { status: 400 }
-      )
+    if (!name || !password || !userType) {
+      return NextResponse.json({ error: '모든 필드를 입력해주세요' }, { status: 400 })
     }
 
-    // 비밀번호 길이 확인
     if (password.length < 6) {
-      return NextResponse.json(
-        { error: '비밀번호는 최소 6자 이상이어야 합니다' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '비밀번호는 최소 6자 이상이어야 합니다' }, { status: 400 })
     }
 
-    // 학생인 경우 학번 길이 확인
-    if (userType === 'student' && id.length !== 9) {
-      return NextResponse.json(
-        { error: '학번은 9자리여야 합니다' },
-        { status: 400 }
-      )
+    const supabase = createServiceClient()
+
+    if (userType === 'student') {
+      const studentId = body.studentId
+      if (!studentId) {
+        return NextResponse.json({ error: '학번을 입력해주세요' }, { status: 400 })
+      }
+
+      if (!/^\d{9}$/.test(studentId)) {
+        return NextResponse.json({ error: '학번은 9자리 숫자여야 합니다. (예: 202012345)' }, { status: 400 })
+      }
+
+      const { data: existingStudent, error: lookupError } = await supabase
+        .from('students')
+        .select('student_id')
+        .eq('student_id', studentId)
+        .maybeSingle<{ student_id: string }>()
+
+      if (lookupError) {
+        console.error('Student lookup error:', lookupError)
+        return NextResponse.json({ error: '학생 정보를 확인할 수 없습니다.' }, { status: 500 })
+      }
+
+      if (existingStudent) {
+        return NextResponse.json({ error: '이미 등록된 학번입니다.' }, { status: 409 })
+      }
+
+      const passwordHash = await hashPassword(password)
+
+      const { error: insertError } = await supabase
+        .from('students')
+        .insert({
+          student_id: studentId,
+          name,
+          password_hash: passwordHash
+        })
+
+      if (insertError) {
+        console.error('Student insert error:', insertError)
+        return NextResponse.json({ error: '학생 계정을 생성할 수 없습니다.' }, { status: 500 })
+      }
+    } else {
+      const professorId = body.professorId
+      if (!professorId) {
+        return NextResponse.json({ error: '교수번호를 입력해주세요' }, { status: 400 })
+      }
+
+      const { data: existingProfessor, error: lookupError } = await supabase
+        .from('professors')
+        .select('professor_id')
+        .eq('professor_id', professorId)
+        .maybeSingle<{ professor_id: string }>()
+
+      if (lookupError) {
+        console.error('Professor lookup error:', lookupError)
+        return NextResponse.json({ error: '교수 정보를 확인할 수 없습니다.' }, { status: 500 })
+      }
+
+      if (existingProfessor) {
+        return NextResponse.json({ error: '이미 등록된 교수번호입니다.' }, { status: 409 })
+      }
+
+      const passwordHash = await hashPassword(password)
+
+      const { error: insertError } = await supabase
+        .from('professors')
+        .insert({
+          professor_id: professorId,
+          name,
+          password_hash: passwordHash
+        })
+
+      if (insertError) {
+        console.error('Professor insert error:', insertError)
+        return NextResponse.json({ error: '교수 계정을 생성할 수 없습니다.' }, { status: 500 })
+      }
     }
 
-    // 기존 사용자 데이터 불러오기
-    const users = getUsers()
+    // 재인증하여 생성된 사용자 정보 확보
+    const authUser = userType === 'student'
+      ? await authenticateStudent(body.studentId as string, password)
+      : await authenticateProfessor(body.professorId as string, password)
 
-    // 중복 ID 체크
-    const userGroup = userType === 'student' ? users.students : users.professors
-    if (userGroup[id]) {
-      return NextResponse.json(
-        { error: '이미 등록된 ID입니다' },
-        { status: 409 }
-      )
+    if (!authUser) {
+      return NextResponse.json({ error: '생성된 계정을 확인할 수 없습니다.' }, { status: 500 })
     }
 
-    // 새 사용자 추가
-    const newUser: StoredUser = {
-      id,
-      name,
-      password, // 실제로는 해시화해야 하지만 테스트용으로 평문 저장
-      type: userType
-    }
-
-    userGroup[id] = newUser
-
-    // 파일에 저장
-    const saved = saveUsers(users)
-    if (!saved) {
-      console.warn('파일 저장 실패, 메모리에만 저장됨')
-    }
-
-    console.log('회원가입 성공:', { id, name, userType })
-
-    // JWT 토큰 생성
     const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
     const secret = new TextEncoder().encode(jwtSecret)
 
     const token = await new SignJWT({
-      userId: newUser.id,
-      userType: newUser.type,
-      name: newUser.name,
+      userId: authUser.id,
+      userType: authUser.type,
+      name: authUser.name
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime('7d')
+      .setExpirationTime(`${ONE_WEEK_SECONDS}s`)
       .sign(secret)
 
-    // 응답 생성
     const response = NextResponse.json({
       success: true,
       user: {
-        id: newUser.id,
-        name: newUser.name,
-        type: newUser.type
+        id: authUser.id,
+        name: authUser.name,
+        type: authUser.type
       },
       message: '회원가입이 완료되었습니다'
     })
 
-    // JWT 토큰을 쿠키로 설정
     response.cookies.set('auth-token', token, {
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7일
+      maxAge: ONE_WEEK_SECONDS,
+      httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true
+      secure: process.env.NODE_ENV === 'production'
     })
 
     return response
-
   } catch (error) {
     console.error('회원가입 오류:', error)
     return NextResponse.json(
@@ -178,14 +159,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// CORS 처리
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
+  return NextResponse.json({}, { status: 200 })
 }

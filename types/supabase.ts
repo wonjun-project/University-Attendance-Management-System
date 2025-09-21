@@ -9,349 +9,340 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      attendances: {
+      students: {
         Row: {
-          check_in_time: string | null
-          check_out_time: string | null
-          created_at: string
-          id: string
-          location_verified: boolean | null
-          session_id: string
-          status: string
           student_id: string
+          name: string
+          password_hash: string
+          created_at: string
           updated_at: string
         }
         Insert: {
-          check_in_time?: string | null
-          check_out_time?: string | null
-          created_at?: string
-          id?: string
-          location_verified?: boolean | null
-          session_id: string
-          status?: string
           student_id: string
+          name: string
+          password_hash: string
+          created_at?: string
           updated_at?: string
         }
         Update: {
-          check_in_time?: string | null
-          check_out_time?: string | null
-          created_at?: string
-          id?: string
-          location_verified?: boolean | null
-          session_id?: string
-          status?: string
           student_id?: string
+          name?: string
+          password_hash?: string
+          created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      professors: {
+        Row: {
+          professor_id: string
+          name: string
+          email: string | null
+          password_hash: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          professor_id: string
+          name: string
+          email?: string | null
+          password_hash: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          professor_id?: string
+          name?: string
+          email?: string | null
+          password_hash?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      courses: {
+        Row: {
+          id: string
+          name: string
+          course_code: string
+          professor_id: string
+          description: string | null
+          schedule: string | null
+          location: string | null
+          location_latitude: number | null
+          location_longitude: number | null
+          location_radius: number | null
+          created_at: string
+          updated_at: string
+          classroom_location?: Json | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          course_code: string
+          professor_id: string
+          description?: string | null
+          schedule?: string | null
+          location?: string | null
+          location_latitude?: number | null
+          location_longitude?: number | null
+          location_radius?: number | null
+          created_at?: string
+          updated_at?: string
+          classroom_location?: Json | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          course_code?: string
+          professor_id?: string
+          description?: string | null
+          schedule?: string | null
+          location?: string | null
+          location_latitude?: number | null
+          location_longitude?: number | null
+          location_radius?: number | null
+          created_at?: string
+          updated_at?: string
+          classroom_location?: Json | null
         }
         Relationships: [
           {
-            foreignKeyName: "attendances_session_id_fkey"
-            columns: ["session_id"]
+            foreignKeyName: 'courses_professor_id_fkey'
+            columns: ['professor_id']
             isOneToOne: false
-            referencedRelation: "class_sessions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendances_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
+            referencedRelation: 'professors'
+            referencedColumns: ['professor_id']
+          }
         ]
       }
       class_sessions: {
         Row: {
-          course_id: string
-          created_at: string
-          date: string
           id: string
+          course_id: string | null
+          date: string
           qr_code: string
           qr_code_expires_at: string
           status: string
+          created_at: string
           updated_at: string
+          start_time: string | null
+          end_time: string | null
+          is_active: boolean | null
+          classroom_latitude: number | null
+          classroom_longitude: number | null
+          classroom_radius: number | null
         }
         Insert: {
-          course_id: string
-          created_at?: string
-          date: string
           id?: string
+          course_id?: string | null
+          date: string
           qr_code: string
           qr_code_expires_at: string
           status?: string
+          created_at?: string
           updated_at?: string
+          start_time?: string | null
+          end_time?: string | null
+          is_active?: boolean | null
+          classroom_latitude?: number | null
+          classroom_longitude?: number | null
+          classroom_radius?: number | null
         }
         Update: {
-          course_id?: string
-          created_at?: string
-          date?: string
           id?: string
+          course_id?: string | null
+          date?: string
           qr_code?: string
           qr_code_expires_at?: string
           status?: string
+          created_at?: string
           updated_at?: string
+          start_time?: string | null
+          end_time?: string | null
+          is_active?: boolean | null
+          classroom_latitude?: number | null
+          classroom_longitude?: number | null
+          classroom_radius?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "class_sessions_course_id_fkey"
-            columns: ["course_id"]
+            foreignKeyName: 'class_sessions_course_id_fkey'
+            columns: ['course_id']
             isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
+            referencedRelation: 'courses'
+            referencedColumns: ['id']
+          }
         ]
       }
-      course_enrollments: {
+      attendances: {
         Row: {
-          course_id: string
-          enrolled_at: string
           id: string
+          session_id: string
           student_id: string
-        }
-        Insert: {
-          course_id: string
-          enrolled_at?: string
-          id?: string
-          student_id: string
-        }
-        Update: {
-          course_id?: string
-          enrolled_at?: string
-          id?: string
-          student_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "course_enrollments_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "course_enrollments_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      courses: {
-        Row: {
-          classroom_location: Json
-          course_code: string
+          status: string
+          check_in_time: string | null
+          check_out_time: string | null
+          location_verified: boolean | null
           created_at: string
-          id: string
-          name: string
-          professor_id: string
-          schedule: Json
           updated_at: string
         }
         Insert: {
-          classroom_location: Json
-          course_code: string
-          created_at?: string
           id?: string
-          name: string
-          professor_id: string
-          schedule: Json
+          session_id: string
+          student_id: string
+          status?: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          location_verified?: boolean | null
+          created_at?: string
           updated_at?: string
         }
         Update: {
-          classroom_location?: Json
-          course_code?: string
-          created_at?: string
           id?: string
-          name?: string
-          professor_id?: string
-          schedule?: Json
+          session_id?: string
+          student_id?: string
+          status?: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          location_verified?: boolean | null
+          created_at?: string
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "courses_professor_id_fkey"
-            columns: ["professor_id"]
+            foreignKeyName: 'attendances_session_id_fkey'
+            columns: ['session_id']
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
+            referencedRelation: 'class_sessions'
+            referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'attendances_student_id_fkey'
+            columns: ['student_id']
+            isOneToOne: false
+            referencedRelation: 'students'
+            referencedColumns: ['student_id']
+          }
         ]
       }
       location_logs: {
         Row: {
-          accuracy: number
-          attendance_id: string
           id: string
-          is_valid: boolean | null
+          attendance_id: string
           latitude: number
           longitude: number
+          accuracy: number
           timestamp: string
+          is_valid: boolean | null
         }
         Insert: {
-          accuracy: number
-          attendance_id: string
           id?: string
-          is_valid?: boolean | null
+          attendance_id: string
           latitude: number
           longitude: number
+          accuracy: number
           timestamp?: string
+          is_valid?: boolean | null
         }
         Update: {
-          accuracy?: number
-          attendance_id?: string
           id?: string
-          is_valid?: boolean | null
+          attendance_id?: string
           latitude?: number
           longitude?: number
+          accuracy?: number
           timestamp?: string
+          is_valid?: boolean | null
         }
         Relationships: [
           {
-            foreignKeyName: "location_logs_attendance_id_fkey"
-            columns: ["attendance_id"]
+            foreignKeyName: 'location_logs_attendance_id_fkey'
+            columns: ['attendance_id']
             isOneToOne: false
-            referencedRelation: "attendances"
-            referencedColumns: ["id"]
-          },
+            referencedRelation: 'attendances'
+            referencedColumns: ['id']
+          }
         ]
       }
-      professors: {
+      course_enrollments: {
         Row: {
-          created_at: string
-          email: string | null
-          name: string
-          password_hash: string
-          professor_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          email?: string | null
-          name: string
-          password_hash: string
-          professor_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          email?: string | null
-          name?: string
-          password_hash?: string
-          professor_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      students: {
-        Row: {
-          created_at: string
-          name: string
-          password_hash: string
-          student_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          name: string
-          password_hash: string
-          student_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          name?: string
-          password_hash?: string
-          student_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      users: {
-        Row: {
-          created_at: string
-          email: string
           id: string
-          name: string
-          role: string
-          student_id: string | null
-          updated_at: string
+          course_id: string
+          student_id: string
+          enrolled_at: string
         }
         Insert: {
-          created_at?: string
-          email: string
           id?: string
-          name: string
-          role: string
-          student_id?: string | null
-          updated_at?: string
+          course_id: string
+          student_id: string
+          enrolled_at?: string
         }
         Update: {
-          created_at?: string
-          email?: string
           id?: string
-          name?: string
-          role?: string
-          student_id?: string | null
-          updated_at?: string
+          course_id?: string
+          student_id?: string
+          enrolled_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'course_enrollments_course_id_fkey'
+            columns: ['course_id']
+            isOneToOne: false
+            referencedRelation: 'courses'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'course_enrollments_student_id_fkey'
+            columns: ['student_id']
+            isOneToOne: false
+            referencedRelation: 'students'
+            referencedColumns: ['student_id']
+          }
+        ]
+      }
+      predefined_locations: {
+        Row: {
+          id: string
+          building_name: string
+          room_number: string | null
+          display_name: string
+          latitude: number | null
+          longitude: number | null
+          radius: number | null
+          is_active: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          building_name: string
+          room_number?: string | null
+          display_name: string
+          latitude?: number | null
+          longitude?: number | null
+          radius?: number | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          building_name?: string
+          room_number?: string | null
+          display_name?: string
+          latitude?: number | null
+          longitude?: number | null
+          radius?: number | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
     }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      calculate_distance: {
-        Args: {
-          lat1: number
-          lon1: number
-          lat2: number
-          lon2: number
-        }
-        Returns: number
-      }
-      check_in_attendance: {
-        Args: {
-          p_session_id: string
-          p_student_id: string
-          p_latitude: number
-          p_longitude: number
-          p_accuracy: number
-        }
-        Returns: Json
-      }
-      generate_qr_code: {
-        Args: {
-          p_course_id: string
-          p_date: string
-          p_expires_in_minutes?: number
-        }
-        Returns: string
-      }
-      track_student_location: {
-        Args: {
-          p_attendance_id: string
-          p_latitude: number
-          p_longitude: number
-          p_accuracy: number
-        }
-        Returns: Json
-      }
-      validate_student_location: {
-        Args: {
-          p_student_lat: number
-          p_student_lon: number
-          p_classroom_location: Json
-        }
-        Returns: boolean
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    Views: {}
+    Functions: {}
+    Enums: {}
+    CompositeTypes: {}
   }
 }

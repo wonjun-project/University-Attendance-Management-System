@@ -1,221 +1,133 @@
 import { NextRequest, NextResponse } from 'next/server'
-import * as fs from 'fs'
-import * as path from 'path'
-import { jwtVerify } from 'jose'
+import { createServiceClient } from '@/lib/supabase-admin'
+import { getCurrentUserFromRequest } from '@/lib/auth'
+import type { SupabaseCourseRow } from '@/lib/session/types'
 
-// Course 타입 정의
-interface Course {
+interface CourseResponseItem {
   id: string
   name: string
   courseCode: string
-  description: string
-  location: string | null
+  description?: string | null
+  location?: string | null
   totalSessions: number
-  professorId: string
-  classroomLocation?: {
-    latitude: number
-    longitude: number
-    radius: number
-  }
-  createdAt?: string
-  updatedAt?: string
-}
-
-// 강의 데이터 파일 경로
-const COURSES_FILE = path.join(process.cwd(), 'data', 'courses.json')
-
-// 강의 데이터를 파일에서 읽어오기
-function getCourses() {
-  try {
-    if (fs.existsSync(COURSES_FILE)) {
-      const data = fs.readFileSync(COURSES_FILE, 'utf-8')
-      return JSON.parse(data)
-    }
-  } catch (error) {
-    console.error('강의 데이터 읽기 실패:', error)
-  }
-  return []
-}
-
-// 강의 데이터를 파일에 저장하기
-function saveCourses(courses: Course[]) {
-  try {
-    const dir = path.dirname(COURSES_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2))
-    return true
-  } catch (error) {
-    console.error('강의 데이터 저장 실패:', error)
-    return false
-  }
-}
-
-// 초기 강의 데이터
-const INITIAL_COURSES = [
-  {
-    id: 'course1',
-    name: 'C언어프로그래밍',
-    courseCode: 'C언어669',
-    description: 'C언어 기초부터 고급까지',
-    location: '제1자연관 501호',
-    totalSessions: 0,
-    professorId: 'prof001'
-  },
-  {
-    id: 'course2',
-    name: '데모 강의',
-    courseCode: 'DEMO101',
-    description: '테스트용 강의입니다',
-    location: null,
-    totalSessions: 1,
-    professorId: 'prof001'
-  },
-  {
-    id: 'course3',
-    name: '자료구조와 알고리즘',
-    courseCode: '자료구782',
-    description: '자료구조와 알고리즘 이론 및 실습',
-    location: '제1자연관 501호',
-    totalSessions: 0,
-    professorId: 'prof001'
-  },
-  {
-    id: 'course4',
-    name: '컴퓨터과학개론',
-    courseCode: 'CS101',
-    description: '컴퓨터과학의 기초 개념',
-    location: null,
-    totalSessions: 0,
-    professorId: 'prof001'
-  },
-  {
-    id: 'course5',
-    name: '웹 프로그래밍',
-    courseCode: 'WEB301',
-    description: 'HTML, CSS, JavaScript 기반 웹 개발',
-    location: '컴퓨터공학관 204호',
-    totalSessions: 0,
-    professorId: 'prof001'
-  }
-]
-
-// JWT에서 사용자 정보 추출
-async function getUserFromRequest(request: NextRequest) {
-  const authToken = request.cookies.get('auth-token')?.value
-
-  if (!authToken) {
-    return null
-  }
-
-  const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-  const secret = new TextEncoder().encode(jwtSecret)
-
-  try {
-    const { payload } = await jwtVerify(authToken, secret)
-    return {
-      userId: payload.userId as string,
-      userType: payload.userType as string,
-      name: payload.name as string
-    }
-  } catch {
-    return null
-  }
+  locationLatitude?: number | null
+  locationLongitude?: number | null
+  locationRadius?: number | null
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // JWT에서 professorId 가져오기
-    const user = await getUserFromRequest(request)
+    const user = await getCurrentUserFromRequest(request)
 
     if (!user) {
-      return NextResponse.json(
-        { error: '인증이 필요합니다' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: '인증이 필요합니다' }, { status: 401 })
     }
 
-    const professorId = user.userId
-
-    // 파일에서 강의 데이터 읽기
-    let allCourses = getCourses()
-
-    // 초기 데이터가 없으면 기본 강의 생성
-    if (allCourses.length === 0) {
-      const initialCourses = INITIAL_COURSES.map(course => ({
-        ...course,
-        professorId: professorId
-      }))
-      saveCourses(initialCourses)
-      allCourses = initialCourses
+    if (user.userType !== 'professor') {
+      return NextResponse.json({ error: '교수만 강의 목록을 조회할 수 있습니다.' }, { status: 403 })
     }
 
-    // 해당 교수의 강의만 필터링
-    const professorCourses = allCourses.filter((course: Course) => course.professorId === professorId)
+    const supabase = createServiceClient()
+    type CourseWithSessionAggregate = SupabaseCourseRow & {
+      class_sessions: { count: number }[]
+    }
 
-    return NextResponse.json({
-      success: true,
-      courses: professorCourses
+    const { data, error } = await supabase
+      .from('courses')
+      .select('id, name, course_code, description, location, location_latitude, location_longitude, location_radius, class_sessions(count)')
+      .eq('professor_id', user.userId)
+      .order('created_at', { ascending: false })
+
+
+    if (error) {
+      console.error('Courses fetch error:', error)
+      return NextResponse.json({ error: '강의 목록을 불러오는데 실패했습니다.' }, { status: 500 })
+    }
+
+    const rawCourses = (data ?? []) as CourseWithSessionAggregate[]
+
+    const courses: CourseResponseItem[] = rawCourses.map((course) => {
+      const sessionCount = Array.isArray(course.class_sessions) && course.class_sessions.length > 0
+        ? course.class_sessions[0]?.count ?? 0
+        : 0
+
+      return {
+        id: course.id,
+        name: course.name,
+        courseCode: course.course_code,
+        description: course.description,
+        location: course.location,
+        totalSessions: sessionCount,
+        locationLatitude: course.location_latitude,
+        locationLongitude: course.location_longitude,
+        locationRadius: course.location_radius
+      }
     })
+
+    return NextResponse.json({ success: true, courses })
   } catch (error) {
     console.error('Courses fetch error:', error)
-    return NextResponse.json(
-      { error: '강의 목록을 불러오는데 실패했습니다.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: '강의 목록을 불러오는데 실패했습니다.' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUserFromRequest(request)
+
+    if (!user) {
+      return NextResponse.json({ error: '인증이 필요합니다' }, { status: 401 })
+    }
+
+    if (user.userType !== 'professor') {
+      return NextResponse.json({ error: '교수만 강의를 생성할 수 있습니다.' }, { status: 403 })
+    }
+
     const { name, courseCode, description, location } = await request.json()
 
     if (!name || !courseCode) {
-      return NextResponse.json(
-        { error: '강의명과 강의코드는 필수입니다.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '강의명과 강의코드는 필수입니다.' }, { status: 400 })
     }
 
-    // JWT에서 professorId 가져오기
-    const user = await getUserFromRequest(request)
-    if (!user || user.userType !== 'professor') {
-      return NextResponse.json(
-        { error: '교수만 강의를 생성할 수 있습니다' },
-        { status: 403 }
-      )
+    const supabase = createServiceClient()
+
+    const { data, error } = await supabase
+      .from('courses')
+      .insert({
+        name,
+        course_code: courseCode,
+        description: description ?? null,
+        location: location ?? null,
+        location_latitude: null,
+        location_longitude: null,
+        location_radius: location ? 100 : null,
+        professor_id: user.userId
+      })
+      .select('id, name, course_code, description, location, location_latitude, location_longitude, location_radius')
+      .single<SupabaseCourseRow>()
+
+    if (error || !data) {
+      console.error('Course creation error:', error)
+      return NextResponse.json({ error: '강의 생성에 실패했습니다.' }, { status: 500 })
     }
 
-    // 기존 강의 데이터 읽기
-    const courses = getCourses()
+    const insertedCourse = data as SupabaseCourseRow
 
-    // 새 강의 생성
-    const newCourse = {
-      id: `course_${Date.now()}`,
-      name,
-      courseCode,
-      description: description || '',
-      location: location || null,
+    const course: CourseResponseItem = {
+      id: insertedCourse.id,
+      name: insertedCourse.name,
+      courseCode: insertedCourse.course_code,
+      description: insertedCourse.description,
+      location: insertedCourse.location,
       totalSessions: 0,
-      professorId: user.userId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      locationLatitude: insertedCourse.location_latitude,
+      locationLongitude: insertedCourse.location_longitude,
+      locationRadius: insertedCourse.location_radius
     }
 
-    // 강의 목록에 추가하고 저장
-    courses.push(newCourse)
-    saveCourses(courses)
-
-    return NextResponse.json({
-      success: true,
-      course: newCourse
-    })
+    return NextResponse.json({ success: true, course })
   } catch (error) {
     console.error('Course creation error:', error)
-    return NextResponse.json(
-      { error: '강의 생성에 실패했습니다.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: '강의 생성 중 오류가 발생했습니다.' }, { status: 500 })
   }
 }

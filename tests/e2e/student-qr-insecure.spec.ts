@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3001'
+const BASE_URL = process.env.BASE_URL || 'https://university-attendance-management-sy.vercel.app'
 
 test.describe('Student QR scanner - insecure context handling', () => {
   test('shows HTTPS requirement when camera starts in insecure context', async ({ browser }) => {
