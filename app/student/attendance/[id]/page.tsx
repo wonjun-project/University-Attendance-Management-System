@@ -6,7 +6,6 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/compo
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { createHeartbeatManager, type HeartbeatCallback } from '@/lib/realtime/heartbeat-manager'
-import { getRealtimeTracker } from '@/lib/realtime/supabase-tracker'
 
 interface SessionInfo {
   sessionId: string
@@ -46,6 +45,17 @@ export default function AttendancePage() {
   const [sessionEnded, setSessionEnded] = useState(false)
   const [heartbeatManager, setHeartbeatManager] = useState<ReturnType<typeof createHeartbeatManager> | null>(null)
 
+  // Heartbeat 추적 중지
+  const stopHeartbeatTracking = useCallback(() => {
+    if (heartbeatManager) {
+      console.log('💓 Heartbeat 추적 중지')
+      heartbeatManager.stopHeartbeat()
+      setHeartbeatManager(null)
+    }
+    setIsTracking(false)
+    setTrackingStatus('checking')
+  }, [heartbeatManager])
+
   // Heartbeat 콜백 함수
   const handleHeartbeatUpdate: HeartbeatCallback = useCallback((data) => {
     console.log('💓 Heartbeat 업데이트:', data)
@@ -83,7 +93,7 @@ export default function AttendancePage() {
       setLocationError(data.error)
       setTrackingStatus('out_of_range')
     }
-  }, [])
+  }, [stopHeartbeatTracking])
 
   // Heartbeat 추적 시작
   const startHeartbeatTracking = useCallback(
@@ -124,17 +134,6 @@ export default function AttendancePage() {
     },
     [isTracking, heartbeatManager, handleHeartbeatUpdate, sessionId]
   )
-
-  // Heartbeat 추적 중지
-  const stopHeartbeatTracking = useCallback(() => {
-    if (heartbeatManager) {
-      console.log('💓 Heartbeat 추적 중지')
-      heartbeatManager.stopHeartbeat()
-      setHeartbeatManager(null)
-    }
-    setIsTracking(false)
-    setTrackingStatus('checking')
-  }, [heartbeatManager])
 
   const fetchSessionData = useCallback(async () => {
     try {

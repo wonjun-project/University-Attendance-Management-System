@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { promises as fs } from 'fs'
+import path from 'path'
+import { randomUUID } from 'crypto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,17 +33,115 @@ interface NormalizedLocation {
   displayName?: string
 }
 
+interface LocalSessionRecord {
+  id: string
+  courseId: string
+  courseName: string
+  courseCode: string
+  date: string
+  qrCode: string
+  qrCodeExpiresAt: string
+  status: 'active' | 'ended'
+  classroomLocation: {
+    latitude: number
+    longitude: number
+    radius: number
+    locationType: LocationType
+    predefinedLocationId: string | null
+    displayName?: string
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+interface LocalCourseRecord {
+  id: string
+  name?: string | null
+  courseCode?: string | null
+  course_code?: string | null
+  totalSessions?: number
+  updatedAt?: string
+}
+
+const DATA_DIR = path.join(process.cwd(), 'data')
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json')
+const COURSES_FILE = path.join(DATA_DIR, 'courses.json')
+
+function isUUID(value: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value)
+}
+
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+async function readJsonFile<T>(filePath: string, defaultValue: T): Promise<T> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8')
+    return JSON.parse(raw) as T
+  } catch {
+    return defaultValue
+  }
+}
+
+async function writeJsonFile<T>(filePath: string, data: T): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true })
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+}
+
+function createSessionId(): string {
+  try {
+    return randomUUID()
+  } catch {
+    return `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  }
+}
+
+async function upsertLocalSession(record: LocalSessionRecord): Promise<void> {
+  const sessions = await readJsonFile<LocalSessionRecord[]>(SESSIONS_FILE, [])
+  const filtered = sessions.filter(session => session.id !== record.id)
+  filtered.push(record)
+  await writeJsonFile(SESSIONS_FILE, filtered)
+}
+
+async function updateLocalCourseSessionCount(courseId: string, isoTimestamp: string): Promise<void> {
+  const courses = await readJsonFile<LocalCourseRecord[]>(COURSES_FILE, [])
+  const index = courses.findIndex(course => course?.id === courseId)
+  if (index === -1) {
+    return
+  }
+
+  const current = courses[index]
+  const totalSessions = typeof current?.totalSessions === 'number' ? current.totalSessions + 1 : 1
+
+  courses[index] = {
+    ...current,
+    totalSessions,
+    updatedAt: isoTimestamp
+  }
+
+  await writeJsonFile(COURSES_FILE, courses)
+}
+
+function buildBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('QR generation API called')
 
-    // Supabase 클라이언트 생성 (서비스 역할 키 사용)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseAvailable = Boolean(supabaseUrl && supabaseServiceRoleKey)
 
-    // 사용자 인증 확인
     const user = await getCurrentUser()
     console.log('User authentication result:', user)
 
@@ -51,7 +152,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 요청 데이터 파싱 및 위치 정규화
     const payload: QRGenerateRequest = await request.json()
     const { courseId, expiresInMinutes = 30, classroomLocation } = payload
 
@@ -62,52 +162,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const toNumber = (value: unknown): number | null => {
-      if (value === null || value === undefined || value === '') {
-        return null
-      }
-      if (typeof value === 'number') {
-        return Number.isFinite(value) ? value : null
-      }
-      const parsed = Number(value)
-      return Number.isFinite(parsed) ? parsed : null
-    }
-
     const locationType: LocationType = classroomLocation.locationType === 'current' ? 'current' : 'predefined'
     let normalizedLocation: NormalizedLocation | null = null
-
-    if (locationType === 'predefined' && classroomLocation.predefinedLocationId) {
-      const { data: predefinedLocation, error: predefinedError } = await supabase
-        .from('predefined_locations')
-        .select('id, latitude, longitude, radius, display_name, is_active')
-        .eq('id', classroomLocation.predefinedLocationId)
-        .maybeSingle()
-
-      if (predefinedError) {
-        console.warn('⚠️ Failed to resolve predefined location, fallback to client payload:', predefinedError.message)
-      }
-
-      if (predefinedLocation && predefinedLocation.is_active !== false) {
-        const lat = toNumber(predefinedLocation.latitude)
-        const lon = toNumber(predefinedLocation.longitude)
-        const rad = toNumber(predefinedLocation.radius)
-
-        if (lat !== null && lon !== null) {
-          normalizedLocation = {
-            latitude: lat,
-            longitude: lon,
-            radius: rad ?? 100,
-            locationType: 'predefined',
-            predefinedLocationId: predefinedLocation.id,
-            displayName: predefinedLocation.display_name ?? undefined
-          }
-        }
-      }
-    }
 
     const fallbackLat = toNumber(classroomLocation.latitude)
     const fallbackLon = toNumber(classroomLocation.longitude)
     const fallbackRadius = toNumber(classroomLocation.radius)
+
+    if (locationType === 'predefined' && classroomLocation.predefinedLocationId && supabaseAvailable) {
+      try {
+        const supabase = createClient(supabaseUrl!, supabaseServiceRoleKey!)
+        const { data: predefinedLocation, error: predefinedError } = await supabase
+          .from('predefined_locations')
+          .select('id, latitude, longitude, radius, display_name, is_active')
+          .eq('id', classroomLocation.predefinedLocationId)
+          .maybeSingle()
+
+        if (predefinedError) {
+          console.warn('⚠️ Failed to resolve predefined location, fallback to client payload:', predefinedError.message)
+        }
+
+        if (predefinedLocation && predefinedLocation.is_active !== false) {
+          const lat = toNumber(predefinedLocation.latitude)
+          const lon = toNumber(predefinedLocation.longitude)
+          const rad = toNumber(predefinedLocation.radius)
+
+          if (lat !== null && lon !== null) {
+            normalizedLocation = {
+              latitude: lat,
+              longitude: lon,
+              radius: rad ?? 100,
+              locationType: 'predefined',
+              predefinedLocationId: predefinedLocation.id,
+              displayName: predefinedLocation.display_name ?? undefined
+            }
+          }
+        }
+      } catch (predefinedLookupError) {
+        console.warn('⚠️ Predefined location lookup failed, using client payload:', predefinedLookupError)
+      }
+    }
 
     if (!normalizedLocation) {
       if (fallbackLat === null || fallbackLon === null) {
@@ -135,177 +229,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!normalizedLocation) {
-      return NextResponse.json(
-        { error: 'Failed to normalize classroom location.' },
-        { status: 400 }
-      )
-    }
-
     normalizedLocation.radius = Math.max(10, Math.round(normalizedLocation.radius))
 
-    // 강의 정보 조회 또는 데모 강의 생성
-    let courseName = '데모 강의'
-    let courseCode = 'DEMO101'
-
-    if (courseId.startsWith('demo-course-')) {
-      // 데모 강의인 경우 기본 값 사용 (DB 조회 없이)
-      courseName = '데모 강의'
-      courseCode = 'DEMO101'
-    } else {
-      // 실제 강의인 경우 DB에서 조회
-      const { data: course, error: courseError } = await supabase
-        .from('courses')
-        .select('name, course_code')
-        .eq('id', courseId)
-        .eq('professor_id', user.userId)
-        .single()
-
-      if (courseError || !course) {
-        return NextResponse.json(
-          { error: 'Course not found or access denied' },
-          { status: 404 }
-        )
-      }
-
-      courseName = course.name
-      courseCode = course.course_code
-    }
-
-    // 현재 시간과 만료 시간 계산
     const now = new Date()
     const expiresAt = new Date(now.getTime() + expiresInMinutes * 60 * 1000)
 
-    // 세션을 Supabase에 저장 (UUID는 자동 생성됨)
-    // 데모 강의인 경우 course_id를 null로 설정
-    const sessionData: Record<string, unknown> = {
-      status: 'active',
-      date: now.toISOString().split('T')[0], // YYYY-MM-DD 형식
-      qr_code: 'placeholder', // 임시 플레이스홀더
-      qr_code_expires_at: expiresAt.toISOString(), // QR 코드 만료 시간 추가
-      classroom_latitude: normalizedLocation.latitude,
-      classroom_longitude: normalizedLocation.longitude,
-      classroom_radius: normalizedLocation.radius,
-      updated_at: now.toISOString()
-    }
+    const shouldUseSupabase = supabaseAvailable && (courseId.startsWith('demo-course-') || isUUID(courseId))
 
-    // 데모 강의가 아닌 경우에만 course_id 설정
-    if (!courseId.startsWith('demo-course-')) {
-      sessionData.course_id = courseId
-    } else {
-      // 데모 강의의 경우 실제 존재하는 강의 UUID 사용
-      sessionData.course_id = '27468faa-0394-41bf-871a-a4079e9dee79'
-    }
-
-    // 먼저 세션을 생성해서 ID를 얻은 후 QR 코드 생성
-    const { data: session, error: sessionError } = await supabase
-      .from('class_sessions')
-      .insert(sessionData)
-      .select('id')
-      .single()
-
-    if (sessionError) {
-      console.error('세션 저장 실패:', sessionError)
-      return NextResponse.json(
-        { error: 'Failed to create session: ' + sessionError.message },
-        { status: 500 }
-      )
-    }
-
-    const sessionId = session.id
-
-    // 실제 QR 코드 문자열 생성 (학생이 스캔할 URL)
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'
-    const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`
-
-    // 생성된 세션의 qr_code 필드 업데이트
-    const { error: updateError } = await supabase
-      .from('class_sessions')
-      .update({ qr_code: qrCodeString })
-      .eq('id', sessionId)
-
-    if (updateError) {
-      console.error('QR 코드 업데이트 실패:', updateError)
-      // 세션은 생성되었으므로 계속 진행
-    }
-
-    // QR 데이터 생성
-    const qrData = {
-      sessionId: sessionId,
-      courseId: courseId,
-      expiresAt: expiresAt.toISOString(),
-      type: 'attendance' as const
-    }
-
-    console.log('Session saved:', {
-      id: sessionId,
-      courseId,
-      courseName,
-      courseCode,
-      date: now.toISOString().split('T')[0],
-      qrCode: qrCodeString,
-      qrCodeExpiresAt: expiresAt.toISOString(),
-      status: 'active',
-      classroomLocation: normalizedLocation,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString()
-    })
-
-    // 로컬 개발 환경용 세션 JSON 업데이트 (실패해도 무시)
-    try {
-      const fs = (await import('fs')).default
-      const path = (await import('path')).default
-      const sessionsFilePath = path.join(process.cwd(), 'data', 'sessions.json')
-
-      if (fs.existsSync(sessionsFilePath)) {
-        const raw = fs.readFileSync(sessionsFilePath, 'utf-8')
-        let sessions: any[] = []
-        try {
-          const parsed = JSON.parse(raw)
-          if (Array.isArray(parsed)) {
-            sessions = parsed
-          }
-        } catch (parseError) {
-          console.warn('⚠️ Failed to parse sessions.json. Recreating file.', parseError)
-        }
-
-        const filtered = sessions.filter(sessionItem => sessionItem?.id !== sessionId)
-        filtered.push({
-          id: sessionId,
+    if (shouldUseSupabase) {
+      try {
+        const response = await generateWithSupabase({
           courseId,
-          courseName,
-          courseCode,
-          date: now.toISOString().split('T')[0],
-          qrCode: qrCodeString,
-          qrCodeExpiresAt: expiresAt.toISOString(),
-          status: 'active',
-          classroomLocation: {
-            latitude: normalizedLocation.latitude,
-            longitude: normalizedLocation.longitude,
-            radius: normalizedLocation.radius,
-            locationType: normalizedLocation.locationType,
-            predefinedLocationId: normalizedLocation.predefinedLocationId,
-            displayName: normalizedLocation.displayName
-          },
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString()
+          normalizedLocation,
+          expiresAt,
+          now,
+          baseUrl: buildBaseUrl(),
+          supabaseUrl: supabaseUrl!,
+          serviceRoleKey: supabaseServiceRoleKey!
         })
-
-        fs.writeFileSync(sessionsFilePath, JSON.stringify(filtered, null, 2))
+        if (response) {
+          return response
+        }
+      } catch (supabaseError) {
+        console.warn('Supabase QR generation failed, falling back to local JSON store:', supabaseError)
       }
-    } catch (fileError) {
-      console.warn('⚠️ Unable to update local sessions.json:', fileError instanceof Error ? fileError.message : fileError)
     }
 
-    // 성공 응답
-    return NextResponse.json({
-      success: true,
-      qrData,
-      qrCode: qrCodeString,
-      expiresAt: expiresAt.toISOString(),
-      courseName,
-      courseCode,
-      classroomLocation: normalizedLocation
+    return await generateWithLocal({
+      courseId,
+      normalizedLocation,
+      expiresAt,
+      now,
+      baseUrl: buildBaseUrl()
     })
 
   } catch (error) {
@@ -318,4 +273,196 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+async function generateWithSupabase(args: {
+  courseId: string
+  normalizedLocation: NormalizedLocation
+  expiresAt: Date
+  now: Date
+  baseUrl: string
+  supabaseUrl: string
+  serviceRoleKey: string
+}): Promise<NextResponse | null> {
+  const { courseId, normalizedLocation, expiresAt, now, baseUrl, supabaseUrl, serviceRoleKey } = args
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
+
+  let courseName = '데모 강의'
+  let courseCode = 'DEMO101'
+
+  if (courseId.startsWith('demo-course-')) {
+    courseName = '데모 강의'
+    courseCode = 'DEMO101'
+  } else {
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
+      .select('name, course_code')
+      .eq('id', courseId)
+      .maybeSingle()
+
+    if (courseError) {
+      throw new Error(`Course lookup failed: ${courseError.message}`)
+    }
+
+    if (!course) {
+      console.warn('Supabase course not found. Falling back to local generation.')
+      return null
+    }
+
+    courseName = course.name
+    courseCode = course.course_code
+  }
+
+  const sessionData: Record<string, unknown> = {
+    status: 'active',
+    date: now.toISOString().split('T')[0],
+    qr_code: 'placeholder',
+    qr_code_expires_at: expiresAt.toISOString(),
+    classroom_latitude: normalizedLocation.latitude,
+    classroom_longitude: normalizedLocation.longitude,
+    classroom_radius: normalizedLocation.radius,
+    classroom_location_type: normalizedLocation.locationType,
+    predefined_location_id: normalizedLocation.predefinedLocationId,
+    classroom_display_name: normalizedLocation.displayName,
+    updated_at: now.toISOString()
+  }
+
+  if (!courseId.startsWith('demo-course-')) {
+    sessionData.course_id = courseId
+  } else {
+    sessionData.course_id = '27468faa-0394-41bf-871a-a4079e9dee79'
+  }
+
+  const { data: session, error: sessionError } = await supabase
+    .from('class_sessions')
+    .insert(sessionData)
+    .select('id')
+    .single()
+
+  if (sessionError || !session) {
+    throw new Error(sessionError ? `Failed to create session: ${sessionError.message}` : 'Failed to create session')
+  }
+
+  const sessionId = session.id as string
+  const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`
+
+  const { error: updateError } = await supabase
+    .from('class_sessions')
+    .update({ qr_code: qrCodeString })
+    .eq('id', sessionId)
+
+  if (updateError) {
+    console.error('QR 코드 업데이트 실패:', updateError)
+  }
+
+  const sessionRecord: LocalSessionRecord = {
+    id: sessionId,
+    courseId,
+    courseName,
+    courseCode,
+    date: now.toISOString().split('T')[0],
+    qrCode: qrCodeString,
+    qrCodeExpiresAt: expiresAt.toISOString(),
+    status: 'active',
+    classroomLocation: {
+      latitude: normalizedLocation.latitude,
+      longitude: normalizedLocation.longitude,
+      radius: normalizedLocation.radius,
+      locationType: normalizedLocation.locationType,
+      predefinedLocationId: normalizedLocation.predefinedLocationId,
+      displayName: normalizedLocation.displayName
+    },
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  }
+
+  try {
+    await upsertLocalSession(sessionRecord)
+  } catch (fileError) {
+    console.warn('⚠️ Unable to update local sessions.json:', fileError instanceof Error ? fileError.message : fileError)
+  }
+
+  try {
+    await updateLocalCourseSessionCount(courseId, now.toISOString())
+  } catch (courseUpdateError) {
+    console.warn('⚠️ Unable to update local course session count:', courseUpdateError instanceof Error ? courseUpdateError.message : courseUpdateError)
+  }
+
+  return NextResponse.json({
+    success: true,
+    qrData: {
+      sessionId,
+      courseId,
+      expiresAt: expiresAt.toISOString(),
+      type: 'attendance' as const
+    },
+    qrCode: qrCodeString,
+    expiresAt: expiresAt.toISOString(),
+    courseName,
+    courseCode,
+    classroomLocation: normalizedLocation
+  })
+}
+
+async function generateWithLocal(args: {
+  courseId: string
+  normalizedLocation: NormalizedLocation
+  expiresAt: Date
+  now: Date
+  baseUrl: string
+}): Promise<NextResponse> {
+  const { courseId, normalizedLocation, expiresAt, now, baseUrl } = args
+
+  const courses = await readJsonFile<LocalCourseRecord[]>(COURSES_FILE, [])
+  const course = courses.find(item => item?.id === courseId)
+
+  const courseName = course?.name ?? '데모 강의'
+  const courseCode = course?.courseCode ?? course?.course_code ?? 'DEMO101'
+
+  const sessionId = createSessionId()
+  const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`
+
+  const sessionRecord: LocalSessionRecord = {
+    id: sessionId,
+    courseId,
+    courseName,
+    courseCode,
+    date: now.toISOString().split('T')[0],
+    qrCode: qrCodeString,
+    qrCodeExpiresAt: expiresAt.toISOString(),
+    status: 'active',
+    classroomLocation: {
+      latitude: normalizedLocation.latitude,
+      longitude: normalizedLocation.longitude,
+      radius: normalizedLocation.radius,
+      locationType: normalizedLocation.locationType,
+      predefinedLocationId: normalizedLocation.predefinedLocationId,
+      displayName: normalizedLocation.displayName
+    },
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  }
+
+  await upsertLocalSession(sessionRecord)
+
+  try {
+    await updateLocalCourseSessionCount(courseId, now.toISOString())
+  } catch (courseUpdateError) {
+    console.warn('⚠️ Unable to update local course session count:', courseUpdateError instanceof Error ? courseUpdateError.message : courseUpdateError)
+  }
+
+  return NextResponse.json({
+    success: true,
+    qrData: {
+      sessionId,
+      courseId,
+      expiresAt: expiresAt.toISOString(),
+      type: 'attendance' as const
+    },
+    qrCode: qrCodeString,
+    expiresAt: expiresAt.toISOString(),
+    courseName,
+    courseCode,
+    classroomLocation: normalizedLocation
+  })
 }

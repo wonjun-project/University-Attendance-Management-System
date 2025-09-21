@@ -53,7 +53,7 @@ export class SupabaseRealtimeTracker {
   subscribeToSessionAttendance(
     sessionId: string,
     onAttendanceUpdate: AttendanceCallback,
-    onError?: (error: any) => void
+    onError?: (error: unknown) => void
   ): string {
     const channelName = `session-attendance-${sessionId}`;
 
@@ -97,7 +97,7 @@ export class SupabaseRealtimeTracker {
   subscribeToSessionLocationLogs(
     sessionId: string,
     onLocationUpdate: LocationCallback,
-    onError?: (error: any) => void
+    onError?: (error: unknown) => void
   ): string {
     const channelName = `session-locations-${sessionId}`;
 
@@ -150,7 +150,7 @@ export class SupabaseRealtimeTracker {
   subscribeToSessionStatus(
     sessionId: string,
     onSessionUpdate: SessionCallback,
-    onError?: (error: any) => void
+    onError?: (error: unknown) => void
   ): string {
     const channelName = `session-status-${sessionId}`;
 
@@ -194,7 +194,7 @@ export class SupabaseRealtimeTracker {
   subscribeToMyAttendance(
     attendanceId: string,
     onAttendanceUpdate: AttendanceCallback,
-    onError?: (error: any) => void
+    onError?: (error: unknown) => void
   ): string {
     const channelName = `my-attendance-${attendanceId}`;
 
@@ -245,7 +245,7 @@ export class SupabaseRealtimeTracker {
       left_early: number;
       attendance_rate: number;
     }) => void,
-    onError?: (error: any) => void
+    onError?: (error: unknown) => void
   ): string {
     const channelName = `attendance-stats-${sessionId}`;
 

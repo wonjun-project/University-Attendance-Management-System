@@ -15,6 +15,10 @@ export interface BackgroundTrackingOptions {
   highAccuracy: boolean; // GPS 고정밀도 사용
 }
 
+function hasWakeLock(nav: Navigator): nav is Navigator & { wakeLock: { request: (type: 'screen') => Promise<WakeLockSentinel> } } {
+  return 'wakeLock' in nav
+}
+
 export class BackgroundLocationTracker {
   private isTracking = false;
   private isBackground = false;
@@ -293,12 +297,12 @@ export class BackgroundLocationTracker {
 
   private async requestWakeLock(): Promise<void> {
     try {
-      if ('wakeLock' in navigator) {
-        // @ts-ignore - Wake Lock API
-        this.wakeLock = await navigator.wakeLock.request('screen');
+      if (hasWakeLock(navigator)) {
+        const wakeLock = await navigator.wakeLock.request('screen');
+        this.wakeLock = wakeLock;
         console.log('🔒 Wake Lock 활성화 - 화면 꺼짐 방지');
 
-        this.wakeLock.addEventListener('release', () => {
+        wakeLock.addEventListener('release', () => {
           console.log('🔓 Wake Lock 해제됨');
         });
       }

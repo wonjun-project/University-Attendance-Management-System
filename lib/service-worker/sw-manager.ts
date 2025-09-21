@@ -8,16 +8,16 @@ export interface LocationData {
   timestamp: string;
 }
 
-export interface ServiceWorkerMessage {
+export interface ServiceWorkerMessage<T = unknown> {
   type: string;
-  data: any;
+  data: T;
   timestamp: string;
 }
 
 export class ServiceWorkerManager {
   private registration: ServiceWorkerRegistration | null = null;
   private isRegistered = false;
-  private messageCallbacks: Map<string, (data: any) => void> = new Map();
+  private messageCallbacks: Map<string, (data: unknown) => void> = new Map();
 
   async register(): Promise<boolean> {
     if (!('serviceWorker' in navigator)) {
@@ -43,7 +43,7 @@ export class ServiceWorkerManager {
     }
   }
 
-  async startTracking(attendanceId: string, sessionData: any): Promise<boolean> {
+  async startTracking(attendanceId: string, sessionData: unknown): Promise<boolean> {
     if (!this.isRegistered || !this.registration) {
       console.error('Service Worker가 등록되지 않았습니다');
       return false;
@@ -52,12 +52,13 @@ export class ServiceWorkerManager {
     try {
       // Request background sync permission if available
       if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
-        await (this.registration as any).sync.register('location-sync');
+        const registrationWithSync = this.registration as ServiceWorkerRegistration & { sync?: { register: (tag: string) => Promise<void> } };
+        await registrationWithSync.sync?.register('location-sync');
       }
 
       // Request periodic background sync if available
       if ('periodicSync' in window.ServiceWorkerRegistration.prototype) {
-        // @ts-ignore - periodicSync is experimental
+        // @ts-expect-error - periodicSync is experimental
         await this.registration.periodicSync.register('location-periodic', {
           minInterval: 30000 // 30 seconds
         });
@@ -84,7 +85,7 @@ export class ServiceWorkerManager {
     console.log('🛑 Service Worker GPS 추적 중지 요청');
   }
 
-  async getStatus(): Promise<any> {
+  async getStatus(): Promise<unknown> {
     if (!this.isRegistered) return null;
 
     return new Promise((resolve) => {
@@ -98,10 +99,12 @@ export class ServiceWorkerManager {
   }
 
   onLocationUpdate(callback: (data: LocationData) => void): void {
-    this.messageCallbacks.set('LOCATION_UPDATE', callback);
+    this.messageCallbacks.set('LOCATION_UPDATE', (payload) => {
+      callback(payload as LocationData);
+    });
   }
 
-  onTrackingStarted(callback: (data: any) => void): void {
+  onTrackingStarted(callback: (data: unknown) => void): void {
     this.messageCallbacks.set('TRACKING_STARTED', callback);
   }
 
@@ -110,10 +113,12 @@ export class ServiceWorkerManager {
   }
 
   onTrackingError(callback: (error: string) => void): void {
-    this.messageCallbacks.set('TRACKING_ERROR', callback);
+    this.messageCallbacks.set('TRACKING_ERROR', (payload) => {
+      callback(String(payload));
+    });
   }
 
-  private sendMessage(type: string, data: any = {}, ports?: MessagePort[]): void {
+  private sendMessage(type: string, data: unknown = {}, ports?: MessagePort[]): void {
     if (!this.registration?.active) return;
 
     this.registration.active.postMessage({

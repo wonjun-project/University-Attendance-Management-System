@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { autoEndSessionIfNeeded, calculateAutoEndAt } from '@/lib/session/session-service'
+import { SupabaseSessionRow } from '@/lib/session/types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -60,21 +61,30 @@ export async function GET(
       )
     }
 
-    const autoEndResult = await autoEndSessionIfNeeded(supabase, {
-      id: session.id,
-      status: session.status,
-      created_at: (session as any).created_at ?? null,
-      updated_at: (session as any).updated_at ?? null,
-      course_id: session.course_id
-    })
-
-    const normalizedSession = {
+    const sessionRow = ({
       ...session,
-      status: autoEndResult.session.status,
-      updated_at: autoEndResult.session.updated_at
+      courses: Array.isArray(session.courses) ? session.courses[0] ?? null : session.courses ?? null
+    } as unknown) as SupabaseSessionRow
+
+    if (!sessionRow.course_id) {
+      return NextResponse.json({ error: '세션에 연결된 강의가 없습니다.' }, { status: 400 })
     }
 
-    const course = normalizedSession.courses as any
+    const autoEndResult = await autoEndSessionIfNeeded(supabase, {
+      id: sessionRow.id,
+      status: sessionRow.status,
+      created_at: sessionRow.created_at,
+      updated_at: sessionRow.updated_at,
+      course_id: sessionRow.course_id
+    })
+
+    const normalizedSession: SupabaseSessionRow = {
+      ...sessionRow,
+      status: autoEndResult.session.status,
+      updated_at: autoEndResult.session.updated_at ?? sessionRow.updated_at
+    }
+
+    const course = Array.isArray(normalizedSession.courses) ? normalizedSession.courses[0] ?? null : normalizedSession.courses
 
     interface ParsedClassroomLocation {
       latitude: number
@@ -141,12 +151,12 @@ export async function GET(
     }
 
     let classroomLocation: ParsedClassroomLocation | null = parseLocation({
-      latitude: (normalizedSession as any).classroom_latitude ?? null,
-      longitude: (normalizedSession as any).classroom_longitude ?? null,
-      radius: (normalizedSession as any).classroom_radius ?? null,
-      locationType: (normalizedSession as any).classroom_location_type ?? undefined,
-      predefinedLocationId: (normalizedSession as any).predefined_location_id ?? null,
-      displayName: (normalizedSession as any).classroom_display_name ?? undefined
+      latitude: normalizedSession.classroom_latitude ?? null,
+      longitude: normalizedSession.classroom_longitude ?? null,
+      radius: normalizedSession.classroom_radius ?? null,
+      locationType: normalizedSession.classroom_location_type ?? undefined,
+      predefinedLocationId: normalizedSession.predefined_location_id ?? null,
+      displayName: normalizedSession.classroom_display_name ?? undefined
     })
 
     if (!classroomLocation) {
@@ -167,7 +177,7 @@ export async function GET(
     const locationRadius = classroomLocation.radius ?? 100
 
     // 응답 데이터 구성 (기존 형식 호환)
-    const autoEndInfo = calculateAutoEndAt((normalizedSession as any).created_at ?? null)
+    const autoEndInfo = calculateAutoEndAt(normalizedSession.created_at ?? null)
 
     const responseData = {
       session: {
