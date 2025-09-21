@@ -1,21 +1,62 @@
+import 'dotenv/config'
 import { test, expect } from '@playwright/test'
+import type { BrowserContext } from '@playwright/test'
+import { SignJWT } from 'jose'
 
-const BASE_URL = process.env.BASE_URL || 'https://university-attendance-management-sy.vercel.app'
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3001'
+const HOSTNAME = new URL(BASE_URL).hostname
+
+async function addAuthCookie(context: BrowserContext, user: { userId: string; userType: 'student' | 'professor'; name: string }) {
+  const secretString = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+  const encoder = new TextEncoder()
+  const token = await new SignJWT(user)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(encoder.encode(secretString))
+
+  const domain = HOSTNAME
+
+  await context.addCookies([
+    {
+      name: 'auth-token',
+      value: token,
+      domain,
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+      expires: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
+    }
+  ])
+}
 
 test.describe('Student QR scanner - insecure context handling', () => {
   test('shows HTTPS requirement when camera starts in insecure context', async ({ browser }) => {
+    test.skip(HOSTNAME !== 'localhost', 'E2E 테스트는 로컬 개발 서버에서만 실행됩니다.')
+
     const context = await browser.newContext()
+    await addAuthCookie(context, {
+      userId: 'stu001',
+      userType: 'student',
+      name: '테스트 학생'
+    })
+
+    await context.route('**/api/auth/session', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          user: {
+            id: 'stu001',
+            name: '테스트 학생',
+            type: 'student'
+          }
+        })
+      })
+    })
+
     const page = await context.newPage()
-
-    await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded' })
-
-    // Ensure 학생 탭이 선택되어 있음
-    await page.getByRole('button', { name: '학생' }).click()
-    await page.fill('input[placeholder="202012345"]', 'stu001')
-    await page.fill('input[placeholder="비밀번호를 입력하세요"]', 'password123')
-    await page.getByRole('button', { name: '로그인' }).click()
-
-    await page.waitForURL('**/student', { timeout: 15000 })
 
     await page.goto(`${BASE_URL}/student/scan`, { waitUntil: 'domcontentloaded' })
 

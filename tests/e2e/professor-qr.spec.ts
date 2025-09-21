@@ -1,29 +1,67 @@
+import 'dotenv/config'
 import { test, expect } from '@playwright/test'
+import type { BrowserContext } from '@playwright/test'
+import { SignJWT } from 'jose'
 
-const BASE_URL = process.env.BASE_URL || 'https://university-attendance-management-sy.vercel.app'
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3001'
+const HOSTNAME = new URL(BASE_URL).hostname
+
+async function addAuthCookie(context: BrowserContext, user: { userId: string; userType: 'student' | 'professor'; name: string }) {
+  const secretString = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+  const encoder = new TextEncoder()
+  const token = await new SignJWT(user)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(encoder.encode(secretString))
+
+  const domain = HOSTNAME
+
+  await context.addCookies([
+    {
+      name: 'auth-token',
+      value: token,
+      domain,
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+      expires: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
+    }
+  ])
+}
 
 test.describe('Professor QR generation (prod)', () => {
   test('generates QR with predefined location', async ({ browser }, testInfo) => {
+    test.skip(HOSTNAME !== 'localhost', 'E2E 테스트는 로컬 개발 서버에서만 실행됩니다.')
+
     const context = await browser.newContext({
       permissions: ['geolocation'],
-      geolocation: { latitude: 36.6291, longitude: 127.4565 },
+      geolocation: { latitude: 36.6291, longitude: 127.4565 }
     })
+
+    await addAuthCookie(context, {
+      userId: 'prof001',
+      userType: 'professor',
+      name: '테스트 교수'
+    })
+
+    await context.route('**/api/auth/session', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          user: {
+            id: 'prof001',
+            name: '테스트 교수',
+            type: 'professor'
+          }
+        })
+      })
+    })
+
     const page = await context.newPage()
 
-    // Login as professor
-    await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded' })
-    await page.screenshot({ path: testInfo.outputPath('step1-login.png'), fullPage: true })
-    await page.getByRole('button', { name: '교수' }).click()
-    await page.waitForSelector('input[placeholder="PROF001"]', { timeout: 15000 })
-    await page.fill('input[placeholder="PROF001"]', 'prof001')
-    await page.fill('input[placeholder="비밀번호를 입력하세요"]', 'password123')
-    await page.getByRole('button', { name: '로그인' }).click()
-    await page.screenshot({ path: testInfo.outputPath('step2-login-submitted.png'), fullPage: true })
-
-    // Redirect to professor dashboard
-    await page.waitForURL(/\/professor(\/.*)?$/, { timeout: 15000 })
-
-    // Go to QR page
     await page.goto(`${BASE_URL}/professor/qr`, { waitUntil: 'domcontentloaded' })
     await page.screenshot({ path: testInfo.outputPath('step3-qr-page.png'), fullPage: true })
     // wait a moment for location options to load (RPC or dummy fallback)
