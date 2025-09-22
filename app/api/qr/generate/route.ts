@@ -133,7 +133,7 @@ async function resolveCourse(
     }
 
     if (existingDemo) {
-      const updatePayload: Record<string, unknown> = {}
+      const updatePayload: Database['public']['Tables']['courses']['Update'] = {}
 
       if (supportsAdvancedLocation) {
         updatePayload.location = location.displayName ?? '임시 강의실'
@@ -148,7 +148,7 @@ async function resolveCourse(
           displayName: location.displayName ?? '임시 강의실',
           locationType: location.locationType,
           predefinedLocationId: location.predefinedLocationId
-        }
+        } as unknown as Database['public']['Tables']['courses']['Update']['classroom_location']
       }
 
       if (Object.keys(updatePayload).length > 0) {
@@ -169,10 +169,12 @@ async function resolveCourse(
       }
     }
 
-    const insertPayload: Record<string, unknown> = {
+    const insertPayload: Database['public']['Tables']['courses']['Insert'] = {
       name: '데모 강의',
       course_code: 'DEMO101',
-      professor_id: professorId
+      professor_id: professorId,
+      description: 'QR 테스트용 데모 강의',
+      schedule: null
     }
 
     if (supportsAdvancedLocation) {
@@ -188,10 +190,7 @@ async function resolveCourse(
         displayName: location.displayName ?? '임시 강의실',
         locationType: location.locationType,
         predefinedLocationId: location.predefinedLocationId
-      }
-      insertPayload.schedule = [
-        { day_of_week: 1, start_time: '09:00', end_time: '10:30' }
-      ]
+      } as unknown as Database['public']['Tables']['courses']['Insert']['classroom_location']
     }
 
     const { data: insertedDemo, error: demoInsertError } = await supabase
