@@ -1,21 +1,21 @@
 -- JWT 기반 인증 시스템용 테스트 데이터
 -- 비밀번호는 모두 'password123'
--- bcrypt 해시: $2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW
+-- bcrypt 해시: $2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u
 
 -- 테스트 학생 계정
 INSERT INTO students (student_id, name, password_hash) VALUES
-('2024001', '홍길동', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW'),
-('2024002', '김영희', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW'),
-('2024003', '박철수', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW'),
-('student001', '이민수', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW'),
-('test123', '최지민', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW')
+('2024001', '홍길동', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u'),
+('2024002', '김영희', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u'),
+('2024003', '박철수', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u'),
+('student001', '이민수', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u'),
+('test123', '최지민', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u')
 ON CONFLICT (student_id) DO NOTHING;
 
 -- 테스트 교수 계정
 INSERT INTO professors (professor_id, name, email, password_hash) VALUES
-('prof001', '김교수', 'kim.prof@university.ac.kr', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW'),
-('prof002', '이교수', 'lee.prof@university.ac.kr', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW'),
-('teacher123', '박교수', 'park.prof@university.ac.kr', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewNCopxXzQtzU2nW')
+('prof001', '김교수', 'kim.prof@university.ac.kr', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u'),
+('prof002', '이교수', 'lee.prof@university.ac.kr', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u'),
+('teacher123', '박교수', 'park.prof@university.ac.kr', '$2b$12$3Kh4o1XgJYn9lmW.0NayPeTPlnA4.UFJqO/eqN9VZxdu7GtSGLt5u')
 ON CONFLICT (professor_id) DO NOTHING;
 
 -- 테스트 강의 생성
