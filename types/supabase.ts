@@ -66,45 +66,45 @@ export type Database = {
           name: string
           course_code: string
           professor_id: string
-          description: string | null
-          schedule: string | null
-          location: string | null
-          location_latitude: number | null
-          location_longitude: number | null
-          location_radius: number | null
+          schedule: Json
           created_at: string
           updated_at: string
-          classroom_location?: Json | null
+          classroom_location: Json | null
+          description?: string | null
+          location?: string | null
+          location_latitude?: number | null
+          location_longitude?: number | null
+          location_radius?: number | null
         }
         Insert: {
           id?: string
           name: string
           course_code: string
           professor_id: string
+          schedule: Json
+          created_at?: string
+          updated_at?: string
+          classroom_location?: Json | null
           description?: string | null
-          schedule?: string | null
           location?: string | null
           location_latitude?: number | null
           location_longitude?: number | null
           location_radius?: number | null
-          created_at?: string
-          updated_at?: string
-          classroom_location?: Json | null
         }
         Update: {
           id?: string
           name?: string
           course_code?: string
           professor_id?: string
+          schedule?: Json
+          created_at?: string
+          updated_at?: string
+          classroom_location?: Json | null
           description?: string | null
-          schedule?: string | null
           location?: string | null
           location_latitude?: number | null
           location_longitude?: number | null
           location_radius?: number | null
-          created_at?: string
-          updated_at?: string
-          classroom_location?: Json | null
         }
         Relationships: [
           {

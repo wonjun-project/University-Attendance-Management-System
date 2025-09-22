@@ -3,6 +3,11 @@ import { getCurrentUser } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase-admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/supabase'
+import {
+  hasAdvancedCourseLocationColumns,
+  hasCourseDescriptionColumn,
+  hasCourseScheduleColumn
+} from '@/lib/courses/schemaSupport'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -36,27 +41,6 @@ interface ResolvedCourse {
   id: string
   name: string
   courseCode: string
-}
-
-let cachedCourseLocationSupport: boolean | null = null
-
-async function hasAdvancedCourseLocationColumns(supabase: SupabaseClient<Database>): Promise<boolean> {
-  if (cachedCourseLocationSupport !== null) {
-    return cachedCourseLocationSupport
-  }
-
-  const { error } = await supabase.from('courses').select('location_latitude').limit(1)
-
-  if (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.info('Courses table lacks advanced location columns, falling back to classroom_location JSON:', error.message)
-    }
-    cachedCourseLocationSupport = false
-    return false
-  }
-
-  cachedCourseLocationSupport = true
-  return true
 }
 
 function toNumber(value: unknown): number | null {
@@ -121,12 +105,15 @@ async function resolveCourse(
   const supportsAdvancedLocation = await hasAdvancedCourseLocationColumns(supabase)
 
   if (courseId.startsWith('demo-course-')) {
-    const { data: existingDemo, error: demoLookupError } = await supabase
+    const { data: demoCandidates, error: demoLookupError } = await supabase
       .from('courses')
-      .select('id, name, course_code')
+      .select('id, name, course_code, created_at')
       .eq('professor_id', professorId)
       .eq('course_code', 'DEMO101')
-      .maybeSingle<Pick<Database['public']['Tables']['courses']['Row'], 'id' | 'name' | 'course_code'>>()
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    const existingDemo = Array.isArray(demoCandidates) ? demoCandidates[0] : demoCandidates ?? null
 
     if (demoLookupError) {
       console.warn('Demo course lookup failed:', demoLookupError)
@@ -169,12 +156,32 @@ async function resolveCourse(
       }
     }
 
+    const [supportsScheduleColumn, supportsDescriptionColumn] = await Promise.all([
+      hasCourseScheduleColumn(supabase),
+      hasCourseDescriptionColumn(supabase)
+    ])
+
     const insertPayload: Database['public']['Tables']['courses']['Insert'] = {
       name: '데모 강의',
       course_code: 'DEMO101',
       professor_id: professorId,
-      description: 'QR 테스트용 데모 강의',
-      schedule: null
+      schedule: [] as unknown as Database['public']['Tables']['courses']['Insert']['schedule'],
+      classroom_location: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        radius: location.radius,
+        displayName: location.displayName ?? '임시 강의실',
+        locationType: location.locationType,
+        predefinedLocationId: location.predefinedLocationId
+      } as Database['public']['Tables']['courses']['Insert']['classroom_location']
+    }
+
+    if (!supportsScheduleColumn) {
+      delete (insertPayload as Record<string, unknown>).schedule
+    }
+
+    if (supportsDescriptionColumn) {
+      insertPayload.description = 'QR 테스트용 데모 강의'
     }
 
     if (supportsAdvancedLocation) {
@@ -182,15 +189,6 @@ async function resolveCourse(
       insertPayload.location_latitude = location.latitude
       insertPayload.location_longitude = location.longitude
       insertPayload.location_radius = location.radius
-    } else {
-      insertPayload.classroom_location = {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        radius: location.radius,
-        displayName: location.displayName ?? '임시 강의실',
-        locationType: location.locationType,
-        predefinedLocationId: location.predefinedLocationId
-      } as unknown as Database['public']['Tables']['courses']['Insert']['classroom_location']
     }
 
     const { data: insertedDemo, error: demoInsertError } = await supabase
