@@ -38,6 +38,27 @@ interface ResolvedCourse {
   courseCode: string
 }
 
+let cachedCourseLocationSupport: boolean | null = null
+
+async function hasAdvancedCourseLocationColumns(supabase: SupabaseClient<Database>): Promise<boolean> {
+  if (cachedCourseLocationSupport !== null) {
+    return cachedCourseLocationSupport
+  }
+
+  const { error } = await supabase.from('courses').select('location_latitude').limit(1)
+
+  if (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('Courses table lacks advanced location columns, falling back to classroom_location JSON:', error.message)
+    }
+    cachedCourseLocationSupport = false
+    return false
+  }
+
+  cachedCourseLocationSupport = true
+  return true
+}
+
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null
@@ -97,28 +118,49 @@ async function resolveCourse(
   professorId: string,
   location: NormalizedLocation
 ): Promise<ResolvedCourse> {
+  const supportsAdvancedLocation = await hasAdvancedCourseLocationColumns(supabase)
+
   if (courseId.startsWith('demo-course-')) {
     const { data: existingDemo, error: demoLookupError } = await supabase
       .from('courses')
-      .select('id, name, course_code, location, location_latitude, location_longitude, location_radius')
+      .select('id, name, course_code')
       .eq('professor_id', professorId)
       .eq('course_code', 'DEMO101')
-      .maybeSingle<Database['public']['Tables']['courses']['Row']>()
+      .maybeSingle<Pick<Database['public']['Tables']['courses']['Row'], 'id' | 'name' | 'course_code'>>()
 
     if (demoLookupError) {
       console.warn('Demo course lookup failed:', demoLookupError)
     }
 
     if (existingDemo) {
-      await supabase
-        .from('courses')
-        .update({
-          location: location.displayName ?? existingDemo.location ?? '임시 강의실',
-          location_latitude: location.latitude,
-          location_longitude: location.longitude,
-          location_radius: location.radius
-        })
-        .eq('id', existingDemo.id)
+      const updatePayload: Record<string, unknown> = {}
+
+      if (supportsAdvancedLocation) {
+        updatePayload.location = location.displayName ?? '임시 강의실'
+        updatePayload.location_latitude = location.latitude
+        updatePayload.location_longitude = location.longitude
+        updatePayload.location_radius = location.radius
+      } else {
+        updatePayload.classroom_location = {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          radius: location.radius,
+          displayName: location.displayName ?? '임시 강의실',
+          locationType: location.locationType,
+          predefinedLocationId: location.predefinedLocationId
+        }
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        const { error: updateError } = await supabase
+          .from('courses')
+          .update(updatePayload)
+          .eq('id', existingDemo.id)
+
+        if (updateError) {
+          console.warn('Demo course update failed:', updateError)
+        }
+      }
 
       return {
         id: existingDemo.id,
@@ -127,19 +169,34 @@ async function resolveCourse(
       }
     }
 
+    const insertPayload: Record<string, unknown> = {
+      name: '데모 강의',
+      course_code: 'DEMO101',
+      professor_id: professorId
+    }
+
+    if (supportsAdvancedLocation) {
+      insertPayload.location = location.displayName ?? '임시 강의실'
+      insertPayload.location_latitude = location.latitude
+      insertPayload.location_longitude = location.longitude
+      insertPayload.location_radius = location.radius
+    } else {
+      insertPayload.classroom_location = {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        radius: location.radius,
+        displayName: location.displayName ?? '임시 강의실',
+        locationType: location.locationType,
+        predefinedLocationId: location.predefinedLocationId
+      }
+      insertPayload.schedule = [
+        { day_of_week: 1, start_time: '09:00', end_time: '10:30' }
+      ]
+    }
+
     const { data: insertedDemo, error: demoInsertError } = await supabase
       .from('courses')
-      .insert({
-        name: '데모 강의',
-        course_code: 'DEMO101',
-        professor_id: professorId,
-        description: 'QR 테스트용 데모 강의',
-        schedule: null,
-        location: location.displayName ?? '임시 강의실',
-        location_latitude: location.latitude,
-        location_longitude: location.longitude,
-        location_radius: location.radius
-      })
+      .insert(insertPayload)
       .select('id, name, course_code')
       .single<Pick<Database['public']['Tables']['courses']['Row'], 'id' | 'name' | 'course_code'>>()
 
