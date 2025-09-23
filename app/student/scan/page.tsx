@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { QRCodeScannerNative } from '@/components/qr/QRCodeScannerNative'
@@ -8,6 +8,14 @@ import { QRCodeData } from '@/lib/qr/qr-generator'
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingPage } from '@/components/ui'
 
 export default function ScanPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <ScanPageContent />
+    </Suspense>
+  )
+}
+
+function ScanPageContent() {
   const router = useRouter()
   const { user, loading } = useAuth()
   const [scannerActive, setScannerActive] = useState(false)
