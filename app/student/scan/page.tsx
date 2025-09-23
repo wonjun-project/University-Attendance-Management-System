@@ -60,6 +60,13 @@ function ScanPageContent() {
       console.warn('QR code is missing courseId; skipping auto-enrollment')
     }
 
+    console.log('📍 Sending check-in request with data:', {
+      sessionId: qrData.sessionId,
+      latitude,
+      longitude,
+      accuracy
+    })
+
     const response = await fetch('/api/attendance/checkin', {
       method: 'POST',
       headers: {

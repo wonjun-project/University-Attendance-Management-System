@@ -100,7 +100,10 @@ export async function POST(request: NextRequest) {
     const longitude = Number(body.longitude)
     const accuracy = Number(body.accuracy ?? 0)
 
+    console.log('📍 Check-in request received:', { sessionId, latitude, longitude, accuracy })
+
     if (!sessionId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      console.error('❌ Invalid request parameters:', { sessionId, latitude, longitude })
       return NextResponse.json({ error: 'Session ID, latitude, and longitude are required' }, { status: 400 })
     }
 
@@ -109,6 +112,8 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServiceClient()
+
+    console.log('🔍 Looking up session with ID:', sessionId)
 
     const { data: session, error: sessionError } = await supabase
       .from('class_sessions')
@@ -129,13 +134,17 @@ export async function POST(request: NextRequest) {
       .maybeSingle<SupabaseSessionRow>()
 
     if (sessionError) {
-      console.error('Session lookup error:', sessionError)
+      console.error('❌ Session lookup error:', sessionError)
+      console.error('❌ Failed to find session with ID:', sessionId)
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
     if (!session) {
+      console.error('❌ No session found with ID:', sessionId)
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+
+    console.log('✅ Session found:', { id: session.id, courseId: session.course_id, status: session.status })
 
     const sessionRow = session
 

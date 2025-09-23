@@ -323,11 +323,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (sessionInsertError || !sessionInsert) {
-      console.error('세션 저장 실패:', sessionInsertError)
+      console.error('❌ 세션 저장 실패:', sessionInsertError)
       return NextResponse.json({ error: 'Failed to create session: ' + (sessionInsertError?.message ?? 'Unknown error') }, { status: 500 })
     }
 
     const sessionId = sessionInsert.id
+    console.log('✅ Session created successfully with ID:', sessionId)
 
     const baseUrl = buildBaseUrl(request)
     const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`

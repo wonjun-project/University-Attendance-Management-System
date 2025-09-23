@@ -88,8 +88,14 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
         // 1) 우선 JSON 기반 포맷 시도
         let parsed = QRCodeGenerator.parseQRData(raw)
 
+        if (parsed) {
+          console.log('✅ QR code parsed as JSON:', parsed)
+          addLog(`JSON parsed successfully: sessionId=${parsed.sessionId}`)
+        }
+
         // 2) JSON이 아니면 URL/텍스트 폴백 파싱
         if (!parsed) {
+          console.log('⚠️ QR code is not JSON, raw data:', raw)
           addLog('QR is not JSON. Trying URL/text fallback...')
 
           let sessionId: string | null = null

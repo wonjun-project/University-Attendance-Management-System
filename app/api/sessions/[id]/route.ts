@@ -62,8 +62,10 @@ export async function GET(
 ) {
   try {
     const sessionId = params.id
+    console.log('📍 GET /api/sessions/[id] called with sessionId:', sessionId)
 
     if (!sessionId) {
+      console.error('❌ No sessionId provided in params')
       return NextResponse.json(
         { error: '세션 ID가 필요합니다.' },
         { status: 400 }
@@ -100,12 +102,15 @@ export async function GET(
       .maybeSingle<SupabaseSessionRow>()
 
     if (sessionError || !session) {
-      console.error('Session not found:', sessionError)
+      console.error('❌ Session not found for ID:', sessionId)
+      console.error('❌ Session error:', sessionError)
       return NextResponse.json(
         { error: '세션을 찾을 수 없습니다.' },
         { status: 404 }
       )
     }
+
+    console.log('✅ Session found:', { id: session.id, courseId: session.course_id })
 
     const sessionRow = session
 

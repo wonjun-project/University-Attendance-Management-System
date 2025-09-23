@@ -10,11 +10,22 @@ export function createServiceClient(): SupabaseClient<Database> {
     throw new Error('NEXT_PUBLIC_SUPABASE_URL 환경 변수가 설정되어 있지 않습니다.')
   }
 
-  const key = serviceRoleKey || anonKey
-
-  if (!key) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY 또는 NEXT_PUBLIC_SUPABASE_ANON_KEY 중 하나는 반드시 설정되어야 합니다.')
+  // service role 키가 있으면 RLS를 우회할 수 있도록 설정
+  if (serviceRoleKey) {
+    console.log('✅ Using service role key for Supabase (RLS bypassed)')
+    return createClient<Database>(url, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
   }
 
-  return createClient<Database>(url, key)
+  // service role 키가 없으면 anon 키 사용 (RLS 적용됨)
+  if (anonKey) {
+    console.warn('⚠️ Using anon key for Supabase (RLS will be applied)')
+    return createClient<Database>(url, anonKey)
+  }
+
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY 또는 NEXT_PUBLIC_SUPABASE_ANON_KEY 중 하나는 반드시 설정되어야 합니다.')
 }
