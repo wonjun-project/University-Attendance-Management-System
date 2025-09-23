@@ -30,11 +30,12 @@ export class QRCodeGenerator {
   }
 
   static async generateDataURL(
-    data: QRCodeData, 
+    data: QRCodeData,
     options: QRCodeOptions = {}
   ): Promise<string> {
     const mergedOptions = { ...this.defaultOptions, ...options }
     const jsonString = JSON.stringify(data)
+    console.log('🔑 [QRCodeGenerator] QR에 인코딩되는 문자열:', jsonString)
     
     try {
       const dataURL = await QRCode.toDataURL(jsonString, {

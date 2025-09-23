@@ -24,6 +24,10 @@ export function QRCodeDisplay({ qrData, onRefresh, onExpire, onEndSession }: QRC
   useEffect(() => {
     const generateQRCode = async () => {
       try {
+        console.log('🎯 [QRCodeDisplay] 받은 qrData:', qrData)
+        console.log('🔑 [QRCodeDisplay] sessionId:', qrData.sessionId)
+        console.log('📋 [QRCodeDisplay] 실제 QR로 인코딩할 데이터:', JSON.stringify(qrData))
+
         setLoading(true)
         setError('')
         const dataURL = await QRCodeGenerator.generateDataURL(qrData, {

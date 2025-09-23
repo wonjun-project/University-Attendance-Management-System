@@ -307,43 +307,81 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     const expiresAt = new Date(now.getTime() + expiresInMinutes * 60 * 1000)
 
-    const { data: sessionInsert, error: sessionInsertError } = await supabase
-      .from('class_sessions')
-      .insert({
-        course_id: resolvedCourse.id,
-        status: 'active',
-        date: now.toISOString().split('T')[0],
-        qr_code: 'placeholder',
-        qr_code_expires_at: expiresAt.toISOString(),
-        classroom_latitude: normalizedLocation.latitude,
-        classroom_longitude: normalizedLocation.longitude,
-        classroom_radius: normalizedLocation.radius
-      })
-      .select('id')
-      .single()
+    // UUID를 미리 생성하여 안전하게 처리
+    const sessionId = crypto.randomUUID()
 
-    if (sessionInsertError || !sessionInsert) {
-      console.error('❌ 세션 저장 실패:', sessionInsertError)
-      return NextResponse.json({ error: 'Failed to create session: ' + (sessionInsertError?.message ?? 'Unknown error') }, { status: 500 })
+    const sessionData = {
+      id: sessionId,  // ID를 명시적으로 설정
+      course_id: resolvedCourse.id,
+      status: 'active',
+      date: now.toISOString().split('T')[0],
+      qr_code: 'placeholder',
+      qr_code_expires_at: expiresAt.toISOString(),
+      classroom_latitude: normalizedLocation.latitude,
+      classroom_longitude: normalizedLocation.longitude,
+      classroom_radius: normalizedLocation.radius
     }
 
-    const sessionId = sessionInsert.id
-    console.log('✅ Session created successfully with ID:', sessionId)
+    console.log('📦 [QR Generate] 세션 생성 데이터:', {
+      id: sessionData.id,
+      courseId: sessionData.course_id,
+      status: sessionData.status
+    })
+
+    const { error: sessionInsertError } = await supabase
+      .from('class_sessions')
+      .insert(sessionData)
+
+    if (sessionInsertError) {
+      console.error('❌ [QR Generate] 세션 저장 실패:', sessionInsertError)
+      return NextResponse.json({ error: 'Failed to create session: ' + (sessionInsertError?.message ?? 'Unknown error') }, { status: 500 })
+    }
+    console.log('✅ [QR Generate] 세션 생성 성공:', {
+      sessionId,
+      sessionIdType: typeof sessionId,
+      sessionIdLength: sessionId.length
+    })
+
+    // 세션이 정말로 저장되었는지 즉시 확인
+    const { data: verifySession, error: verifyError } = await supabase
+      .from('class_sessions')
+      .select('id, status, qr_code')
+      .eq('id', sessionId)
+      .single()
+
+    if (verifyError || !verifySession) {
+      console.error('⚠️ [QR Generate] 세션 검증 실패:', {
+        sessionId,
+        error: verifyError,
+        found: !!verifySession
+      })
+    } else {
+      console.log('✔️ [QR Generate] 세션 검증 성공:', {
+        id: verifySession.id,
+        status: verifySession.status,
+        qrCodeLength: verifySession.qr_code?.length
+      })
+    }
 
     const baseUrl = buildBaseUrl(request)
 
     // QR 데이터 객체 생성 (JSON 형태)
     const qrDataObject = {
-      sessionId,
+      sessionId: sessionId,  // 이제 확실히 존재함
       courseId: resolvedCourse.id,
       expiresAt: expiresAt.toISOString(),
       type: 'attendance' as const,
       baseUrl
     }
 
+    console.log('🎯 [QR Generate] QR 데이터 객체:', {
+      sessionId: qrDataObject.sessionId,
+      sessionIdValid: sessionId && sessionId.length === 36  // UUID 길이 확인
+    })
+
     // JSON 문자열로 변환하여 DB에 저장
     const qrCodeString = JSON.stringify(qrDataObject)
-    console.log('📋 QR 코드 데이터 (JSON):', qrCodeString.substring(0, 100) + '...')
+    console.log('📋 [QR Generate] DB에 저장할 QR 문자열:', qrCodeString.substring(0, 150) + '...')
 
     const { error: updateError } = await supabase
       .from('class_sessions')
@@ -351,10 +389,12 @@ export async function POST(request: NextRequest) {
       .eq('id', sessionId)
 
     if (updateError) {
-      console.warn('QR 코드 업데이트 실패:', updateError)
+      console.error('❌ [QR Generate] QR 코드 업데이트 실패:', updateError)
+    } else {
+      console.log('✔️ [QR Generate] QR 코드 DB 업데이트 성공')
     }
 
-    return NextResponse.json({
+    const response = {
       success: true,
       qrData: qrDataObject,
       qrCode: qrCodeString,  // 이제 JSON 문자열
@@ -362,7 +402,15 @@ export async function POST(request: NextRequest) {
       courseName: resolvedCourse.name,
       courseCode: resolvedCourse.courseCode,
       classroomLocation: normalizedLocation
+    }
+
+    console.log('🚀 [QR Generate] API 응답:', {
+      sessionId: response.qrData.sessionId,
+      qrDataSessionId: qrDataObject.sessionId,
+      success: response.success
     })
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('QR generation error:', error)
     return NextResponse.json(

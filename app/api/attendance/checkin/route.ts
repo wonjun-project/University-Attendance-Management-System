@@ -104,15 +104,25 @@ export async function POST(request: NextRequest) {
       sessionId,
       sessionIdType: typeof sessionId,
       sessionIdLength: sessionId?.length,
+      sessionIdValid: sessionId && typeof sessionId === 'string' && sessionId.length === 36,
       latitude,
       longitude,
       accuracy,
       timestamp: new Date().toISOString()
     })
 
-    if (!sessionId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      console.error('❌ Invalid request parameters:', { sessionId, latitude, longitude })
-      return NextResponse.json({ error: 'Session ID, latitude, and longitude are required' }, { status: 400 })
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.length === 0) {
+      console.error('❌ [CheckIn] 잘못된 sessionId:', {
+        sessionId,
+        type: typeof sessionId,
+        length: sessionId?.length
+      })
+      return NextResponse.json({ error: 'Valid Session ID is required' }, { status: 400 })
+    }
+
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      console.error('❌ [CheckIn] 잘못된 위치 데이터:', { latitude, longitude })
+      return NextResponse.json({ error: 'Valid latitude and longitude are required' }, { status: 400 })
     }
 
     if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
@@ -120,23 +130,50 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServiceClient()
+    console.log('🔧 [CheckIn] Supabase 클라이언트 생성 완료')
 
-    console.log('🔍 [CheckIn] 세션 조회 시작...')
+    console.log('🔍 [CheckIn] 세션 조회 시작...', {
+      targetSessionId: sessionId,
+      sessionIdType: typeof sessionId,
+      sessionIdLength: sessionId.length,
+      isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)
+    })
 
-    // 먼저 모든 활성 세션 조회해서 디버깅
-    const { data: allActiveSessions } = await supabase
+    // 먼저 해당 세션이 존재하는지 확인 (status 조건 없이)
+    const { data: sessionExists, error: existsError } = await supabase
       .from('class_sessions')
-      .select('id, status, created_at')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(5)
+      .select('id, status, qr_code_expires_at')
+      .eq('id', sessionId)
+      .single()
 
-    console.log('📋 [CheckIn] 현재 활성 세션들:', allActiveSessions?.map(s => ({
-      id: s.id,
-      status: s.status,
-      created_at: s.created_at,
-      matchesRequest: s.id === sessionId
-    })))
+    if (existsError || !sessionExists) {
+      console.error('❌ [CheckIn] 세션 존재 확인 실패:', {
+        sessionId,
+        error: existsError?.message,
+        errorCode: existsError?.code
+      })
+
+      // 모든 세션 목록 확인
+      const { data: allSessions } = await supabase
+        .from('class_sessions')
+        .select('id, status')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      console.log('📋 [CheckIn] 전체 세션 목록:', allSessions?.map(s => ({
+        id: s.id.substring(0, 8),
+        status: s.status,
+        matches: s.id === sessionId
+      })))
+    } else {
+      console.log('✅ [CheckIn] 세션 존재 확인:', {
+        id: sessionExists.id,
+        status: sessionExists.status,
+        expiresAt: sessionExists.qr_code_expires_at
+      })
+    }
+
+    console.log('🎯 [CheckIn] 세션 상세 조회 시작...')
 
     const { data: session, error: sessionError } = await supabase
       .from('class_sessions')
@@ -155,6 +192,13 @@ export async function POST(request: NextRequest) {
       `)
       .eq('id', sessionId)
       .maybeSingle<SupabaseSessionRow>()
+
+    console.log('🔍 [CheckIn] 세션 상세 조회 결과:', {
+      found: !!session,
+      sessionId: session?.id,
+      status: session?.status,
+      error: sessionError?.message
+    })
 
     if (sessionError) {
       console.error('❌ [CheckIn] 세션 조회 에러:', {

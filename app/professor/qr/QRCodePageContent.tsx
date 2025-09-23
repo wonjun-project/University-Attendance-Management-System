@@ -76,6 +76,8 @@ export default function QRCodePageContent() {
       if (!response.ok || 'error' in result) {
         throw new Error(('error' in result && result.error) || 'QR코드 생성에 실패했습니다.')
       }
+      console.log('🎯 [QR Generate] API 응답 qrData:', result.qrData)
+      console.log('🔍 [QR Generate] sessionId:', result.qrData.sessionId)
       setQrData(result.qrData)
     } catch (error: unknown) {
       console.error('QR generation error:', error)
