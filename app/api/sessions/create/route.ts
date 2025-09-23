@@ -148,14 +148,6 @@ export async function POST(request: NextRequest) {
         address: requestLocation.address ?? FALLBACK_LOCATION.address
       }
 
-      const schedule = [
-        {
-          day_of_week: new Date().getDay(),
-          start_time: '09:00',
-          end_time: '10:00'
-        }
-      ]
-
       const { data: insertedCourse, error: insertCourseError } = await supabase
         .from('courses')
         .insert({
@@ -163,8 +155,7 @@ export async function POST(request: NextRequest) {
           name: fallbackName,
           course_code: fallbackCode,
           professor_id: user.userId,
-          classroom_location: classroomLocation,
-          schedule,
+          schedule: [] as any, // 빈 스케줄 배열
           location: classroomLocation.address,
           location_latitude: classroomLocation.latitude,
           location_longitude: classroomLocation.longitude,
