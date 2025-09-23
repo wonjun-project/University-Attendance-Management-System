@@ -77,18 +77,39 @@ QR코드와 GPS를 이용해서 대학 출석을 관리하는 웹 애플리케�
 
 ### Vercel 배포
 
-1. **Vercel CLI 설치**
+#### 자동 배포 (GitHub Actions)
+
+1. **Vercel 프로젝트 연결**
    ```bash
-   npm i -g vercel
+   ./scripts/setup-vercel.sh
+   # 또는 수동으로:
+   vercel link
    ```
 
-2. **프로젝트 배포**
+2. **GitHub Secrets 설정**
+   - `VERCEL_TOKEN`: [Vercel 토큰 생성](https://vercel.com/account/tokens)
+   - `VERCEL_PROJECT_ID`: `.vercel/project.json`에서 확인
+   - `VERCEL_ORG_ID`: `.vercel/project.json`에서 확인
+
+3. **환경변수 설정** (Vercel 대시보드 또는 CLI)
    ```bash
-   vercel
+   vercel env add NEXT_PUBLIC_SUPABASE_URL production
+   vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+   vercel env add SUPABASE_SERVICE_ROLE_KEY production
    ```
 
-3. **환경변수 설정**
-   Vercel 대시보드에서 환경변수 추가
+4. **자동 배포**
+   - `main` 브랜치 push 시 자동 배포
+   - GitHub Actions 탭에서 상태 확인
+
+#### 수동 배포
+
+```bash
+npm i -g vercel
+vercel --prod
+```
+
+> 📚 자세한 내용은 [Vercel 배포 가이드](./docs/VERCEL_DEPLOYMENT_FIX.md) 참조
 
 ## 📱 사용 방법
 

@@ -17,15 +17,50 @@ jobs:
         with:
           node-version: 18
 
+      - name: Check Secrets
+        run: |
+          echo "🔍 Checking required secrets..."
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "❌ VERCEL_TOKEN is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VERCEL_ORG_ID }}" ]; then
+            echo "❌ VERCEL_ORG_ID is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            echo "❌ VERCEL_PROJECT_ID is not set"
+            exit 1
+          fi
+          echo "✅ All required secrets are set"
+
       - name: Install Vercel CLI
-        run: npm i -g vercel
+        run: npm i -g vercel@latest
+
+      - name: Create Vercel project.json
+        run: |
+          mkdir -p .vercel
+          echo '{
+            "projectId": "${{ secrets.VERCEL_PROJECT_ID }}",
+            "orgId": "${{ secrets.VERCEL_ORG_ID }}"
+          }' > .vercel/project.json
+          echo "📝 Created .vercel/project.json"
 
       - name: Pull Vercel Environment Information
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+        run: |
+          echo "🔗 Pulling Vercel environment..."
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN" || {
+            echo "❌ Failed to pull Vercel environment"
+            echo "Please check:"
+            echo "1. VERCEL_TOKEN is valid"
+            echo "2. VERCEL_PROJECT_ID and VERCEL_ORG_ID match your Vercel project"
+            echo "3. The project exists in Vercel"
+            exit 1
+          }
 
       - name: Install Dependencies
         run: npm ci
@@ -33,10 +68,17 @@ jobs:
       - name: Build
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: vercel build --prod --token "$VERCEL_TOKEN"
 
       - name: Deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🚀 Deploying to Vercel..."
+          vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+          echo "✅ Deployment complete!"
 
