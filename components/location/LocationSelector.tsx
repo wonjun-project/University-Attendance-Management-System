@@ -7,6 +7,9 @@ import { Input } from '@/components/ui'
 
 export type LocationType = 'predefined' | 'current'
 
+const MIN_RADIUS = 100
+const MAX_RADIUS = 500
+
 export interface LocationData {
   latitude: number
   longitude: number
@@ -80,15 +83,19 @@ function LocationSelector({
     // React 상태 업데이트는 비동기이므로 setSelectedType('current') 후 즉시 체크하면 이전 값일 수 있음
     console.log('🎯 Processing current location (bypassing selectedType check due to React async state)')
     
-    // 적응형 반경 사용 (GPS 정확도 기반으로 자동 계산된 값)
-    const adaptiveRadius = coords.adaptiveRadius || Number(radius) || 100
+    // 적응형 반경 사용 (GPS 정확도 기반으로 자동 계산된 값) + 안전범위 보정
+    const calculatedRadius = typeof coords.adaptiveRadius === 'number'
+      ? coords.adaptiveRadius
+      : Number(radius) || MIN_RADIUS
+    const normalizedRadius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, Math.round(calculatedRadius)))
+    setRadius(normalizedRadius.toString())
     
     const locationData: LocationData = {
       latitude: coords.latitude,
       longitude: coords.longitude,
-      radius: adaptiveRadius,
-      displayName: coords.adaptiveRadius 
-        ? `현재 위치 (적응형 반경 ${adaptiveRadius}m)` 
+      radius: normalizedRadius,
+      displayName: typeof coords.adaptiveRadius === 'number'
+        ? `현재 위치 (적응형 반경 ${normalizedRadius}m)`
         : '현재 위치',
       locationType: 'current'
     }
@@ -98,13 +105,18 @@ function LocationSelector({
   }
 
   const handleRadiusChange = (newRadius: string) => {
-    setRadius(newRadius)
+    const parsedRadius = Number(newRadius)
+    const normalizedRadius = Number.isFinite(parsedRadius)
+      ? Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, Math.round(parsedRadius)))
+      : MIN_RADIUS
+
+    setRadius(normalizedRadius.toString())
     
     // 현재 위치가 설정되어 있고 반경을 변경하는 경우 즉시 업데이트
     if (value?.locationType === 'current') {
       const updatedLocation: LocationData = {
         ...value,
-        radius: Number(newRadius) || 100,
+        radius: normalizedRadius,
       }
       onChange(updatedLocation)
     }

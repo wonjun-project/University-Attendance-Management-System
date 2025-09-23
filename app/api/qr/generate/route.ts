@@ -37,6 +37,9 @@ interface NormalizedLocation {
   predefinedLocationId: string | null
 }
 
+const MIN_ALLOWED_RADIUS = 100
+const MAX_ALLOWED_RADIUS = 500
+
 interface ResolvedCourse {
   id: string
   name: string
@@ -86,10 +89,15 @@ async function resolvePredefinedLocation(
     return null
   }
 
+  const normalizedRadius = Math.min(
+    MAX_ALLOWED_RADIUS,
+    Math.max(MIN_ALLOWED_RADIUS, Math.round(rad ?? MIN_ALLOWED_RADIUS))
+  )
+
   return {
     latitude: lat,
     longitude: lon,
-    radius: rad ?? 100,
+    radius: normalizedRadius,
     displayName: data.display_name ?? undefined,
     locationType,
     predefinedLocationId
@@ -256,17 +264,22 @@ export async function POST(request: NextRequest) {
 
     const fallbackLat = toNumber(classroomLocation.latitude)
     const fallbackLon = toNumber(classroomLocation.longitude)
-    const fallbackRadius = toNumber(classroomLocation.radius) ?? 100
+    const fallbackRadius = toNumber(classroomLocation.radius)
 
     if (!normalizedLocation) {
       if (fallbackLat === null || fallbackLon === null) {
         return NextResponse.json({ error: 'Invalid classroom location. latitude/longitude are required.' }, { status: 400 })
       }
 
+      const normalizedRadius = Math.min(
+        MAX_ALLOWED_RADIUS,
+        Math.max(MIN_ALLOWED_RADIUS, Math.round(fallbackRadius ?? MIN_ALLOWED_RADIUS))
+      )
+
       normalizedLocation = {
         latitude: fallbackLat,
         longitude: fallbackLon,
-        radius: Math.max(10, Math.round(fallbackRadius)),
+        radius: normalizedRadius,
         displayName: classroomLocation.displayName ?? undefined,
         locationType,
         predefinedLocationId: classroomLocation.predefinedLocationId ?? null

@@ -47,18 +47,20 @@ export default function CurrentLocationButton({
         )
       })
 
-      // 적응형 반경 계산: max(기본반경 30m, GPS정확도 × 1.5)
-      const baseRadius = 30 // 기본 반경 30m
-      const adaptiveRadius = Math.max(
-        baseRadius, 
-        position.coords.accuracy ? Math.round(position.coords.accuracy * 1.5) : baseRadius
-      )
+      // 적응형 반경 계산: 최소 100m, GPS 정확도에 따라 1.5배 확대, 최대 500m
+      const MIN_RADIUS = 100
+      const MAX_RADIUS = 500
+      const accuracy = typeof position.coords.accuracy === 'number' && Number.isFinite(position.coords.accuracy)
+        ? position.coords.accuracy
+        : MIN_RADIUS
+      const computedRadius = Math.round(Math.max(MIN_RADIUS, accuracy * 1.5))
+      const adaptiveRadius = Math.min(computedRadius, MAX_RADIUS)
 
       const coords: LocationCoords = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
         accuracy: position.coords.accuracy,
-        adaptiveRadius: adaptiveRadius
+        adaptiveRadius
       }
 
       console.log('CurrentLocationButton: calling onLocationUpdate with coords:', coords)
