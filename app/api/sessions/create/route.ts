@@ -1,77 +1,141 @@
+import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionStore } from '@/lib/session-store'
+import { createServiceClient } from '@/lib/supabase-admin'
+
+const FALLBACK_LOCATION = {
+  latitude: 36.6372,
+  longitude: 127.4896,
+  radius: 100,
+  address: '제1자연관 501호 (무심서로 377-3)'
+}
+
+function normaliseNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (!Number.isNaN(parsed)) {
+      return parsed
+    }
+  }
+  return fallback
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { courseId, location } = await request.json()
+    const body = await request.json() as {
+      courseId?: string
+      location?: {
+        lat?: number
+        lng?: number
+        latitude?: number
+        longitude?: number
+        radius?: number
+        address?: string
+      }
+    }
 
+    const courseId = body.courseId
     if (!courseId) {
-      return NextResponse.json(
-        { error: '강의 ID가 필요합니다.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '강의 ID가 필요합니다.' }, { status: 400 })
     }
 
-    // 강의 정보 가져오기 (하드코딩)
-    const courses = [
-      { id: 'course1', name: 'C언어프로그래밍', courseCode: 'C언어669' },
-      { id: 'course2', name: '데모 강의', courseCode: 'DEMO101' },
-      { id: 'course3', name: '자료구조와 알고리즘', courseCode: '자료구782' },
-      { id: 'course4', name: '컴퓨터과학개론', courseCode: 'CS101' },
-      { id: 'course5', name: '웹 프로그래밍', courseCode: 'WEB301' }
-    ]
+    const supabase = createServiceClient()
 
-    const course = courses.find(c => c.id === courseId)
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
+      .select('id, name, course_code, location, location_latitude, location_longitude, location_radius')
+      .eq('id', courseId)
+      .maybeSingle()
+
+    if (courseError) {
+      console.error('[Session Create] 강의 조회 실패:', courseError)
+      return NextResponse.json({ error: '강의 정보를 불러오는 중 오류가 발생했습니다.' }, { status: 500 })
+    }
+
     if (!course) {
-      return NextResponse.json(
-        { error: '강의를 찾을 수 없습니다.' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: '강의를 찾을 수 없습니다.' }, { status: 404 })
     }
 
-    // 강의실 위치 정보 - 청주시 서원구 무심서로 377-3 제1자연관 501호
-    const locationData: Record<string, { lat: number, lng: number, address: string, radius: number }> = {
-      'course1': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // C언어프로그래밍
-      'course2': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // 데모 강의
-      'course3': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // 자료구조와 알고리즘
-      'course4': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }, // 컴퓨터과학개론
-      'course5': { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 } // 웹 프로그래밍
+    const requestLocation = body.location ?? {}
+    const latitude = normaliseNumber(
+      requestLocation.latitude ?? requestLocation.lat ?? course.location_latitude,
+      FALLBACK_LOCATION.latitude
+    )
+    const longitude = normaliseNumber(
+      requestLocation.longitude ?? requestLocation.lng ?? course.location_longitude,
+      FALLBACK_LOCATION.longitude
+    )
+    const requestedRadius = normaliseNumber(
+      requestLocation.radius ?? course.location_radius,
+      FALLBACK_LOCATION.radius
+    )
+    const radius = Math.max(10, Math.min(50, requestedRadius))
+
+    const now = new Date()
+    const createdAtIso = now.toISOString()
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+    const expiresAtIso = expiresAt.toISOString()
+    const sessionId = randomUUID()
+
+    const baseUrl = request.nextUrl.origin
+    const qrPayload = {
+      sessionId,
+      courseId: course.id,
+      expiresAt: expiresAtIso,
+      type: 'attendance' as const,
+      baseUrl
     }
 
-    // 사용자가 설정한 위치 정보가 있으면 사용, 없으면 기본 위치 사용
-    const locationInfo = location || locationData[courseId] || { lat: 36.6372, lng: 127.4896, address: '제1자연관 501호 (무심서로 377-3)', radius: 100 }
+    const sessionInsert = {
+      id: sessionId,
+      course_id: course.id,
+      date: createdAtIso.split('T')[0],
+      status: 'active',
+      qr_code: JSON.stringify(qrPayload),
+      qr_code_expires_at: expiresAtIso,
+      classroom_latitude: latitude,
+      classroom_longitude: longitude,
+      classroom_radius: radius
+    }
 
-    // 새 세션 생성
-    const sessionId = `session_${Date.now()}`
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000) // 30분 후 만료
+    const { error: insertError } = await supabase
+      .from('class_sessions')
+      .insert(sessionInsert)
 
-    const session = {
+    if (insertError) {
+      console.error('[Session Create] 세션 생성 실패:', insertError)
+      return NextResponse.json({ error: '세션 생성에 실패했습니다.' }, { status: 500 })
+    }
+
+    const responseSession = {
       id: sessionId,
       courseId: course.id,
       courseName: course.name,
-      courseCode: course.courseCode,
-      location: locationInfo,
-      qrCode: `https://university-attendance-management-sy.vercel.app/student/attendance/${sessionId}`,
-      expiresAt: expiresAt.toISOString(),
+      courseCode: course.course_code,
+      location: {
+        lat: latitude,
+        lng: longitude,
+        radius,
+        address: requestLocation.address ?? (typeof course.location === 'string' ? course.location : FALLBACK_LOCATION.address)
+      },
+      qrCode: JSON.stringify(qrPayload),
+      qrCodeExpiresAt: expiresAtIso,
+      expiresAt: expiresAtIso,
       isActive: true,
-      createdAt: new Date().toISOString()
+      createdAt: createdAtIso
     }
 
-    // 세션 저장 - 새로운 저장소 사용
-    sessionStore.set(sessionId, session)
-
-    console.log('Created session:', session)
-
-    return NextResponse.json({
-      success: true,
-      session: session
+    console.log('[Session Create] 세션 생성 완료:', {
+      sessionId,
+      courseId: course.id,
+      expiresAt: expiresAtIso
     })
 
+    return NextResponse.json({ success: true, session: responseSession })
   } catch (error) {
     console.error('Session creation error:', error)
-    return NextResponse.json(
-      { error: '세션 생성에 실패했습니다.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: '세션 생성 중 오류가 발생했습니다.' }, { status: 500 })
   }
 }

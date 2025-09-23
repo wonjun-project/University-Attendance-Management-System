@@ -56,6 +56,7 @@ QR코드와 GPS를 이용해서 대학 출석을 관리하는 웹 애플리케�
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
    SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
    ```
+   ↳ service role 키는 서버 전용으로 사용하며, 출석 시도 데이터를 정리하려면 `node scripts/purge-old-attempts.mjs`를 주기적으로 실행하세요.
 
 4. **데이터베이스 설정**
    - Supabase 대시보드에서 새 프로젝트 생성

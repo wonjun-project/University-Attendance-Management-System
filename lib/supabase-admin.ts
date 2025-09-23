@@ -12,7 +12,13 @@ export function createServiceClient(): SupabaseClient<Database> {
 
   // service role 키가 있으면 RLS를 우회할 수 있도록 설정
   if (serviceRoleKey) {
-    console.log('✅ Using service role key for Supabase (RLS bypassed)')
+    console.log(
+      JSON.stringify({
+        scope: 'supabase-admin',
+        role: 'service_role',
+        message: 'Using service role key for Supabase (RLS bypassed)'
+      })
+    )
     return createClient<Database>(url, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
@@ -23,7 +29,13 @@ export function createServiceClient(): SupabaseClient<Database> {
 
   // service role 키가 없으면 anon 키 사용 (RLS 적용됨)
   if (anonKey) {
-    console.warn('⚠️ Using anon key for Supabase (RLS will be applied)')
+    console.warn(
+      JSON.stringify({
+        scope: 'supabase-admin',
+        role: 'anon',
+        message: 'Using anon key for Supabase (RLS will be applied)'
+      })
+    )
     return createClient<Database>(url, anonKey)
   }
 

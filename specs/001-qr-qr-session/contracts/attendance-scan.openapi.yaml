@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: QR 세션 동기화 API
+  version: 1.0.0
+  description: |
+    교수의 QR 세션 생성과 학생의 출석 체크인 흐름을 통합하는 REST 계약.
+    모든 응답 메시지는 한국어 기본 문구를 포함해야 한다.
+servers:
+  - url: https://localhost:3001
+paths:
+  /api/sessions/create:
+    post:
+      summary: 교수 출석 세션 생성
+      description: 지정된 강의에 대해 10분 만료 QR 세션을 Supabase에 생성한다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - courseId
+              properties:
+                courseId:
+                  type: string
+                  format: uuid
+                  description: 강의 ID
+                location:
+                  type: object
+                  description: 옵션. 커스텀 강의실 위치
+                  properties:
+                    latitude:
+                      type: number
+                    longitude:
+                      type: number
+                    radius:
+                      type: number
+                      minimum: 10
+                    address:
+                      type: string
+      responses:
+        '200':
+          description: 세션 생성 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, session]
+                properties:
+                  success:
+                    type: boolean
+                  session:
+                    type: object
+                    required:
+                      - id
+                      - courseId
+                      - qrCodeUrl
+                      - qrCodeToken
+                      - qrCodeExpiresAt
+                      - createdAt
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      courseId:
+                        type: string
+                        format: uuid
+                      qrCodeUrl:
+                        type: string
+                        format: uri
+                      qrCodeToken:
+                        type: string
+                      qrCodeExpiresAt:
+                        type: string
+                        format: date-time
+                        description: 생성 시각 +10분
+                      createdAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: 잘못된 요청 (필수 값 누락 등)
+        '401':
+          description: 비인가 접근
+  /api/attendance/checkin:
+    post:
+      summary: 학생 QR 출석 체크인
+      description: QR 세션 ID 및 위치/시간 정보를 검증하고 출석을 기록한다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sessionId
+                - latitude
+                - longitude
+                - clientTimestamp
+              properties:
+                sessionId:
+                  type: string
+                  format: uuid
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                accuracy:
+                  type: number
+                  description: 선택. GPS 정확도 (m)
+                clientTimestamp:
+                  type: string
+                  format: date-time
+                  description: 학생 단말 로컬 시각 (ISO8601)
+                correlationId:
+                  type: string
+                  format: uuid
+                  description: 선택. UI에서 생성한 상호 참조 키 (없으면 서버에서 생성)
+      responses:
+        '200':
+          description: 출석 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, attendanceId, sessionId, message]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  attendanceId:
+                    type: string
+                    format: uuid
+                  sessionId:
+                    type: string
+                    format: uuid
+                  message:
+                    type: string
+                    description: 한국어 성공 메시지
+                  retryAttempt:
+                    type: integer
+                    description: 0=최초, 1=자동 재시도 결과
+                  serverTimestamp:
+                    type: string
+                    format: date-time
+        '400':
+          description: 잘못된 요청 (시간 오차, 위치 오류 등)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error:
+                    type: string
+                    description: 한국어 설명
+                  code:
+                    type: string
+                    enum: [clock_skew, invalid_location, expired]
+                  allowedSkewSeconds:
+                    type: integer
+                    description: 허용 범위 (60)
+        '404':
+          description: 세션을 찾을 수 없음 (만료/삭제 포함)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [session_not_found]
+        '409':
+          description: 동일 학생이 이미 출석 처리됨
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [already_present]
+        '429':
+          description: 자동 재시도 제한 초과 (추가 재시도 금지)
+        '500':
+          description: 서버 내부 오류
+
+components:
+  securitySchemes:
+    supabaseServiceRole:
+      type: apiKey
+      name: SUPABASE_SERVICE_ROLE_KEY
+      in: header

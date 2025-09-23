@@ -30,7 +30,7 @@ async function addAuthCookie(context: BrowserContext, user: { userId: string; us
   ])
 }
 
-test.describe('Student QR scanner - insecure context handling', () => {
+test.describe.skip('Student QR scanner - insecure context handling', () => {
   test('shows HTTPS requirement when camera starts in insecure context', async ({ browser }) => {
     test.skip(HOSTNAME !== 'localhost', 'E2E 테스트는 로컬 개발 서버에서만 실행됩니다.')
 

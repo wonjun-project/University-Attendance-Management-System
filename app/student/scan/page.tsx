@@ -5,6 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { QRCodeScannerNative } from '@/components/qr/QRCodeScannerNative'
 import { QRCodeData } from '@/lib/qr/qr-generator'
+
+type CheckInResult = {
+  success?: boolean
+  sessionId?: string
+  attendanceId?: string
+  message?: string
+  retryAfterSeconds?: number
+  code?: string
+}
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingPage } from '@/components/ui'
 
 export default function ScanPage() {
@@ -22,20 +31,43 @@ function ScanPageContent() {
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState(false)
+  const [announcement, setAnnouncement] = useState('')
   const searchParams = useSearchParams()
   const sessionIdParam = searchParams.get('sessionId')
   const hasProcessedSessionRef = useRef(false)
+  const correlationIdRef = useRef<string>('')
+  const liveRegionRef = useRef<HTMLDivElement | null>(null)
 
-  const runCheckIn = useCallback(async (qrData: QRCodeData) => {
-    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+  const announce = useCallback((message: string) => {
+    setAnnouncement(message)
+    if (liveRegionRef.current) {
+      liveRegionRef.current.textContent = ''
+      requestAnimationFrame(() => {
+        if (liveRegionRef.current) {
+          liveRegionRef.current.textContent = message
+        }
+      })
+    }
+  }, [])
+
+  const acquireLocation = useCallback(async () => {
+    announce('현재 위치를 확인하는 중입니다...')
+    return await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 0 // 캐시 사용 안함 - 항상 새로운 위치 요청
+        maximumAge: 0
       })
     })
+  }, [announce])
 
-    const { latitude, longitude, accuracy } = position.coords
+  const performCheckIn = useCallback(async (
+    qrData: QRCodeData,
+    attemptNumber = 0,
+    cachedCoords?: GeolocationCoordinates
+  ): Promise<CheckInResult> => {
+    const coords = cachedCoords ?? (await acquireLocation()).coords
+    const { latitude, longitude, accuracy } = coords
 
     if (qrData.courseId) {
       try {
@@ -68,11 +100,18 @@ function ScanPageContent() {
       accuracy
     })
 
+    if (!correlationIdRef.current) {
+      correlationIdRef.current = crypto.randomUUID()
+    }
+
     const checkInData = {
       sessionId: qrData.sessionId,
       latitude,
       longitude,
-      accuracy
+      accuracy,
+      attemptNumber,
+      correlationId: correlationIdRef.current,
+      clientTimestamp: new Date().toISOString()
     }
 
     console.log('📨 [Scan Page] API 호출 전 데이터:', checkInData)
@@ -93,12 +132,26 @@ function ScanPageContent() {
     })
 
     if (!response.ok) {
-      console.error('❌ [Scan Page] 체크인 실패:', result.error)
-      throw new Error(result.error || '출석 체크에 실패했습니다.')
+      console.error('❌ [Scan Page] 체크인 실패:', result.error, result.code)
+
+      const shouldRetry = attemptNumber === 0 && (
+        typeof result?.retryAfterSeconds === 'number' ||
+        result?.code === 'session_not_found' ||
+        result?.code === 'expired'
+      )
+
+      if (shouldRetry) {
+        const delaySeconds = typeof result.retryAfterSeconds === 'number' ? result.retryAfterSeconds : 3
+        announce(`출석 확인에 잠시 시간이 필요합니다. ${delaySeconds}초 후 다시 시도합니다.`)
+        await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000))
+        return performCheckIn(qrData, attemptNumber + 1, coords)
+      }
+
+      throw new Error(result?.error || '출석 체크에 실패했습니다.')
     }
 
     return result
-  }, [])
+  }, [acquireLocation, announce])
 
   const handleScanSuccess = async (qrData: QRCodeData) => {
     console.log('🎯 [Scan Page] QR 스캔 성공:', {
@@ -111,6 +164,8 @@ function ScanPageContent() {
     setScannerActive(false)
     setProcessing(true)
     setError('')
+    correlationIdRef.current = crypto.randomUUID()
+    announce('QR 코드를 확인하고 있습니다...')
 
     try {
       if (typeof window !== 'undefined' && qrData.baseUrl && qrData.baseUrl !== window.location.origin) {
@@ -119,9 +174,10 @@ function ScanPageContent() {
         return
       }
 
-      const result = await runCheckIn(qrData)
+      const result = await performCheckIn(qrData)
 
       setSuccess(true)
+      announce('출석이 완료되었습니다. 잠시 후 출석 현황으로 이동합니다.')
       
       setTimeout(() => {
         router.push(`/student/attendance/${result.sessionId ?? qrData.sessionId}`)
@@ -129,7 +185,7 @@ function ScanPageContent() {
 
     } catch (error: unknown) {
       console.error('Check-in error:', error)
-      
+      announce('출석 체크 중 오류가 발생했습니다.')
       if (typeof error === 'object' && error !== null && 'code' in error) {
         const geoError = error as GeolocationPositionError
         if (geoError.code === geoError.PERMISSION_DENIED) {
@@ -206,10 +262,12 @@ function ScanPageContent() {
           return
         }
 
-        await runCheckIn(qrData)
+        correlationIdRef.current = crypto.randomUUID()
+        const result = await performCheckIn(qrData)
         setSuccess(true)
+        announce('출석이 완료되었습니다. 잠시 후 출석 현황으로 이동합니다.')
         setTimeout(() => {
-          router.push(`/student/attendance/${sessionIdParam}`)
+          router.push(`/student/attendance/${result.sessionId ?? sessionIdParam}`)
         }, 2000)
         completed = true
       } catch (err) {
@@ -229,45 +287,71 @@ function ScanPageContent() {
         }
       }
     })()
-  }, [sessionIdParam, runCheckIn, router])
+  }, [sessionIdParam, performCheckIn, router, announce])
 
   if (loading || !user || user.role !== 'student') {
-    return <div className="min-h-screen bg-gray-50" />
+    return (
+      <>
+        <div className="min-h-screen bg-gray-50" />
+        <div ref={liveRegionRef} className="sr-only" role="status" aria-live="assertive">
+          {announcement}
+        </div>
+      </>
+    )
   }
 
   if (processing) {
-    return <LoadingPage message="출석을 처리하는 중..." />
+    return (
+      <>
+        <LoadingPage message="출석을 처리하는 중..." />
+        <div ref={liveRegionRef} className="sr-only" role="status" aria-live="assertive">
+          {announcement}
+        </div>
+      </>
+    )
   }
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-8">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+      <>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-4">
+          <Card className="w-full max-w-md">
+            <CardContent className="p-8">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  출석 완료! 🎉
+                </h2>
+                <p className="text-gray-600 text-sm mb-4">
+                  출석이 성공적으로 처리되었습니다.
+                </p>
+                <p className="text-xs text-gray-400">
+                  잠시 후 출석 추적 페이지로 이동합니다...
+                </p>
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                출석 완료! 🎉
-              </h2>
-              <p className="text-gray-600 text-sm mb-4">
-                출석이 성공적으로 처리되었습니다.
-              </p>
-              <p className="text-xs text-gray-400">
-                잠시 후 출석 추적 페이지로 이동합니다...
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+        <div ref={liveRegionRef} className="sr-only" role="status" aria-live="assertive">
+          {announcement}
+        </div>
+      </>
     )
   }
 
+  const liveRegion = (
+    <div ref={liveRegionRef} className="sr-only" role="status" aria-live="assertive">
+      {announcement}
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {liveRegion}
       {/* Header */}
       <div className="border-b border-gray-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

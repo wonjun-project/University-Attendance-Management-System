@@ -217,12 +217,84 @@ export type Database = {
             referencedRelation: 'class_sessions'
             referencedColumns: ['id']
           },
+      {
+        foreignKeyName: 'attendances_student_id_fkey'
+        columns: ['student_id']
+        isOneToOne: false
+        referencedRelation: 'students'
+        referencedColumns: ['student_id']
+      }
+      ]
+    }
+      attendance_attempts: {
+        Row: {
+          id: string
+          session_id: string
+          student_id: string
+          attempt_number: number
+          client_timestamp: string | null
+          server_timestamp: string
+          clock_skew_seconds: number | null
+          result: 'success' | 'retry' | 'duplicate' | 'expired' | 'clock_skew' | 'error'
+          failure_reason: string | null
+          device_lat: number | null
+          device_lng: number | null
+          device_accuracy: number | null
+          device_type: string | null
+          network_type: string | null
+          correlation_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          student_id: string
+          attempt_number?: number
+          client_timestamp?: string | null
+          server_timestamp?: string
+          clock_skew_seconds?: number | null
+          result: 'success' | 'retry' | 'duplicate' | 'expired' | 'clock_skew' | 'error'
+          failure_reason?: string | null
+          device_lat?: number | null
+          device_lng?: number | null
+          device_accuracy?: number | null
+          device_type?: string | null
+          network_type?: string | null
+          correlation_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          student_id?: string
+          attempt_number?: number
+          client_timestamp?: string | null
+          server_timestamp?: string
+          clock_skew_seconds?: number | null
+          result?: 'success' | 'retry' | 'duplicate' | 'expired' | 'clock_skew' | 'error'
+          failure_reason?: string | null
+          device_lat?: number | null
+          device_lng?: number | null
+          device_accuracy?: number | null
+          device_type?: string | null
+          network_type?: string | null
+          correlation_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: 'attendances_student_id_fkey'
+            foreignKeyName: 'attendance_attempts_session_id_fkey'
+            columns: ['session_id']
+            isOneToOne: false
+            referencedRelation: 'class_sessions'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'attendance_attempts_student_id_fkey'
             columns: ['student_id']
             isOneToOne: false
-            referencedRelation: 'students'
-            referencedColumns: ['student_id']
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
           }
         ]
       }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase-admin'
@@ -81,6 +82,15 @@ interface CheckInRequest {
   latitude: number
   longitude: number
   accuracy?: number
+  clientTimestamp?: string
+  correlationId?: string
+  attemptNumber?: number
+}
+
+const MAX_CLOCK_SKEW_MS = 60 * 1000
+
+function logCheckin(event: string, data: Record<string, unknown>) {
+  console.log(JSON.stringify({ scope: 'attendance-checkin', event, ...data }))
 }
 
 export async function POST(request: NextRequest) {
@@ -99,6 +109,27 @@ export async function POST(request: NextRequest) {
     const latitude = Number(body.latitude)
     const longitude = Number(body.longitude)
     const accuracy = Number(body.accuracy ?? 0)
+    const clientTimestampRaw = body.clientTimestamp
+    const clientTimestamp = typeof clientTimestampRaw === 'string' ? clientTimestampRaw : undefined
+    const attemptNumber = Number.isFinite(Number(body.attemptNumber)) ? Number(body.attemptNumber) : 0
+    const correlationId = typeof body.correlationId === 'string' && body.correlationId.length > 0 ? body.correlationId : randomUUID()
+    let parsedClientTimestamp: Date | null = null
+
+    if (!clientTimestamp) {
+      return NextResponse.json(
+        { error: 'clientTimestamp is required', code: 'clock_skew', allowedSkewSeconds: MAX_CLOCK_SKEW_MS / 1000 },
+        { status: 400 }
+      )
+    }
+
+    const candidate = new Date(clientTimestamp)
+    if (Number.isNaN(candidate.getTime())) {
+      return NextResponse.json(
+        { error: 'Invalid clientTimestamp format', code: 'clock_skew', allowedSkewSeconds: MAX_CLOCK_SKEW_MS / 1000 },
+        { status: 400 }
+      )
+    }
+    parsedClientTimestamp = candidate
 
     console.log('🎯 [CheckIn] 요청 수신:', {
       sessionId,
@@ -108,7 +139,9 @@ export async function POST(request: NextRequest) {
       latitude,
       longitude,
       accuracy,
-      timestamp: new Date().toISOString()
+      clientTimestamp,
+      timestamp: new Date().toISOString(),
+      correlationId
     })
 
     if (!sessionId || typeof sessionId !== 'string' || sessionId.length === 0) {
@@ -117,12 +150,12 @@ export async function POST(request: NextRequest) {
         type: typeof sessionId,
         length: sessionId?.length
       })
-      return NextResponse.json({ error: 'Valid Session ID is required' }, { status: 400 })
+      return NextResponse.json({ error: '유효한 세션 ID가 필요합니다.' }, { status: 400 })
     }
 
     if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
       console.error('❌ [CheckIn] 잘못된 위치 데이터:', { latitude, longitude })
-      return NextResponse.json({ error: 'Valid latitude and longitude are required' }, { status: 400 })
+      return NextResponse.json({ error: '유효한 위도와 경도가 필요합니다.' }, { status: 400 })
     }
 
     if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
@@ -130,6 +163,40 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServiceClient()
+    const serverNow = new Date()
+    const skew = Math.abs(serverNow.getTime() - parsedClientTimestamp.getTime())
+    const clockSkewSeconds = Math.round(skew / 1000)
+    if (skew > MAX_CLOCK_SKEW_MS) {
+      console.warn('⚠️ [CheckIn] clock skew detected', { skewMs: skew, correlationId })
+      logCheckin('clock_skew', {
+        correlationId,
+        sessionId: sessionId?.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber,
+        clockSkewSeconds
+      })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'clock_skew',
+          failure_reason: 'client_clock_skew',
+          correlation_id: correlationId
+        })
+      return NextResponse.json(
+        {
+          error: '기기 시간이 서버 기준과 1분 이상 차이납니다. 기기 시간을 맞춘 후 다시 시도하세요.',
+          code: 'clock_skew',
+          allowedSkewSeconds: MAX_CLOCK_SKEW_MS / 1000
+        },
+        { status: 400 }
+      )
+    }
+
     console.log('🔧 [CheckIn] Supabase 클라이언트 생성 완료')
 
     console.log('🔍 [CheckIn] 세션 조회 시작...', {
@@ -152,6 +219,28 @@ export async function POST(request: NextRequest) {
         error: existsError?.message,
         errorCode: existsError?.code
       })
+      logCheckin('session_not_found_precheck', {
+        correlationId,
+        sessionId: sessionId?.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'expired',
+          failure_reason: 'session_not_found_precheck',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
 
       // 모든 세션 목록 확인
       const { data: allSessions } = await supabase
@@ -226,12 +315,62 @@ export async function POST(request: NextRequest) {
         console.error('⚠️ [CheckIn] 세션 자체가 존재하지 않음:', sessionId)
       }
 
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'expired',
+          failure_reason: 'session_not_found',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('session_not_found', {
+        stage: 'detail_query',
+        correlationId,
+        sessionId: sessionId?.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: '세션을 찾을 수 없습니다.', code: 'session_not_found' },
+        { status: 404 }
+      )
     }
 
     if (!session) {
       console.error('❌ [CheckIn] 세션 데이터가 null')
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'expired',
+          failure_reason: 'session_data_null',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('session_not_found', {
+        stage: 'data_null',
+        correlationId,
+        sessionId: sessionId?.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: '세션을 찾을 수 없습니다.', code: 'session_not_found' },
+        { status: 404 }
+      )
     }
 
     console.log('✅ [CheckIn] 세션 조회 성공:', {
@@ -264,32 +403,155 @@ export async function POST(request: NextRequest) {
     }
 
     if (autoEndResult.autoEnded || normalizedSession.status === 'ended') {
-      return NextResponse.json({ error: 'Session has already ended.', sessionEnded: true, autoEnded: autoEndResult.autoEnded }, { status: 400 })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'expired',
+          failure_reason: 'session_ended',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('session_ended', {
+        correlationId,
+        sessionId: sessionId.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: '세션이 종료되었습니다.', code: 'expired', sessionEnded: true, autoEnded: autoEndResult.autoEnded },
+        { status: 400 }
+      )
     }
 
     const expiresAt = new Date(normalizedSession.qr_code_expires_at)
     if (expiresAt < new Date()) {
-      return NextResponse.json({ error: 'QR code has expired', sessionEnded: true }, { status: 400 })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'expired',
+          failure_reason: 'qr_expired',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('session_expired', {
+        correlationId,
+        sessionId: sessionId.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: 'QR 코드가 만료되었습니다.', code: 'expired', sessionEnded: true },
+        { status: 400 }
+      )
     }
 
     const resolvedLocation = resolveClassroomLocation(normalizedSession, normalizedSession.courses)
     if (!resolvedLocation) {
-      return NextResponse.json({ error: '강의실 위치 정보가 설정되어 있지 않습니다.' }, { status: 400 })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'error',
+          failure_reason: 'missing_location',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('invalid_location', {
+        reason: 'missing_location',
+        correlationId,
+        sessionId: sessionId.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: '강의실 위치 정보가 설정되어 있지 않습니다.', code: 'invalid_location' },
+        { status: 400 }
+      )
     }
 
     const evaluation = evaluateLocation(latitude, longitude, accuracy, resolvedLocation)
 
     if (!Number.isFinite(evaluation.distance)) {
-      return NextResponse.json({ error: '위치 검증 중 오류가 발생했습니다. 위치 정보를 확인해주세요.' }, { status: 400 })
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'error',
+          failure_reason: 'distance_not_finite',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('invalid_location', {
+        reason: 'distance_not_finite',
+        correlationId,
+        sessionId: sessionId.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: '위치 검증 중 오류가 발생했습니다. 위치 정보를 확인해주세요.', code: 'invalid_location' },
+        { status: 400 }
+      )
     }
 
     if (!evaluation.isLocationValid) {
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'error',
+          failure_reason: 'location_out_of_range',
+          correlation_id: correlationId,
+          device_lat: Number(latitude.toFixed(2)),
+          device_lng: Number(longitude.toFixed(2)),
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      logCheckin('invalid_location', {
+        reason: 'out_of_range',
+        correlationId,
+        sessionId: sessionId.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber,
+        distance: Math.round(evaluation.distance)
+      })
       return NextResponse.json({
         error: `위치 검증 실패: 강의실에서 ${Math.round(evaluation.distance)}m 떨어져 있습니다. (허용 반경: ${resolvedLocation.radius}m, GPS 정확도: ${Math.round(accuracy)}m)`,
+        code: 'invalid_location',
         distance: Math.round(evaluation.distance),
         effectiveDistance: Math.round(evaluation.effectiveDistance),
         allowedRadius: resolvedLocation.radius,
-        gpsAccuracy: Math.round(accuracy)
+        gpsAccuracy: Math.round(accuracy),
+        retryAfterSeconds: attemptNumber === 0 ? 3 : undefined
       }, { status: 400 })
     }
 
@@ -336,22 +598,31 @@ export async function POST(request: NextRequest) {
     let attendanceId: string
 
     if (existingAttendance) {
-      const { error: updateError } = await supabase
-        .from('attendances')
-        .update({
-          status: 'present',
-          check_in_time: nowIso,
-          location_verified: true,
-          updated_at: nowIso
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'duplicate',
+          failure_reason: 'already_present',
+          correlation_id: correlationId,
+          device_lat: Number(latitude.toFixed(2)),
+          device_lng: Number(longitude.toFixed(2)),
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
         })
-        .eq('id', existingAttendance.id)
-
-      if (updateError) {
-        console.error('Attendance update failed:', updateError)
-        return NextResponse.json({ error: 'Failed to update attendance' }, { status: 500 })
-      }
-
-      attendanceId = existingAttendance.id
+      logCheckin('duplicate', {
+        correlationId,
+        sessionId: sessionId.slice(0, 8),
+        studentId: user.userId.slice(0, 8),
+        attemptNumber
+      })
+      return NextResponse.json(
+        { error: '이미 출석 처리되었습니다.', code: 'already_present' },
+        { status: 409 }
+      )
     } else {
       const { data: insertedAttendance, error: insertAttendanceError } = await supabase
         .from('attendances')
@@ -373,13 +644,17 @@ export async function POST(request: NextRequest) {
       attendanceId = insertedAttendance.id
     }
 
+    const truncatedLatitude = Number(latitude.toFixed(2))
+    const truncatedLongitude = Number(longitude.toFixed(2))
+    const truncatedAccuracy = Number.isFinite(accuracy) ? Number(accuracy.toFixed(2)) : 0
+
     const { error: logError } = await supabase
       .from('location_logs')
       .insert({
         attendance_id: attendanceId,
-        latitude,
-        longitude,
-        accuracy,
+        latitude: truncatedLatitude,
+        longitude: truncatedLongitude,
+        accuracy: truncatedAccuracy,
         is_valid: true
       })
 
@@ -387,13 +662,40 @@ export async function POST(request: NextRequest) {
       console.warn('Failed to insert location log:', logError)
     }
 
+    await supabase
+      .from('attendance_attempts')
+      .insert({
+        session_id: sessionId,
+        student_id: user.userId,
+        attempt_number: attemptNumber,
+        client_timestamp: parsedClientTimestamp.toISOString(),
+        clock_skew_seconds: clockSkewSeconds,
+        result: 'success',
+        failure_reason: null,
+        correlation_id: correlationId,
+        device_lat: Number(latitude.toFixed(2)),
+        device_lng: Number(longitude.toFixed(2)),
+        device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+      })
+
+    logCheckin('success', {
+      correlationId,
+      sessionId: sessionId.slice(0, 8),
+      studentId: user.userId.slice(0, 8),
+      attemptNumber,
+      distance: Math.round(evaluation.distance)
+    })
+
     return NextResponse.json({
       success: true,
       attendanceId,
       sessionId,
-      message: 'Successfully checked in',
+      message: '출석이 완료되었습니다.',
       locationVerified: true,
-      distance: Math.round(evaluation.distance)
+      distance: Math.round(evaluation.distance),
+      retryAttempt: attemptNumber,
+      serverTimestamp: serverNow.toISOString(),
+      correlationId
     })
   } catch (error) {
     console.error('Check-in API error:', error)

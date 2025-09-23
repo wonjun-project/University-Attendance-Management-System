@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
 import { QRCodeDisplay } from '@/components/qr'
 import LocationSelector, { type LocationData } from '@/components/location/LocationSelector'
-import { QRCodeData } from '@/lib/qr/qr-generator'
+import { QRCodeData, QRCodeGenerator } from '@/lib/qr/qr-generator'
 
 interface Course { id: string; name: string; courseCode: string }
 
@@ -44,20 +44,17 @@ export default function QRCodePageContent() {
     setIsGenerating(true)
     setError('')
     try {
-      const response = await fetch('/api/qr/generate', {
+      const response = await fetch('/api/sessions/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
           courseId: selectedCourse || `demo-course-${user?.id}`,
-          expiresInMinutes: 30,
-          classroomLocation: {
+          location: {
             latitude: locationData.latitude,
             longitude: locationData.longitude,
             radius: locationData.radius,
-            locationType: locationData.locationType,
-            predefinedLocationId: locationData.predefinedLocationId ?? null,
-            displayName: locationData.displayName ?? undefined
+            address: locationData.displayName ?? undefined
           }
         })
       })
@@ -65,9 +62,7 @@ export default function QRCodePageContent() {
       if (!raw) {
         throw new Error(`서버 응답이 비어 있습니다. 상태코드: ${response.status}. 환경변수 및 권한 설정을 확인하세요.`)
       }
-      let result:
-        | { success: true; qrData: QRCodeData; qrCode: string; expiresAt: string }
-        | { error: string }
+      let result: { success: true; session: { qrCode: string; qrCodeExpiresAt: string; id: string; courseId: string } } | { error: string }
       try {
         result = JSON.parse(raw)
       } catch {
@@ -76,9 +71,17 @@ export default function QRCodePageContent() {
       if (!response.ok || 'error' in result) {
         throw new Error(('error' in result && result.error) || 'QR코드 생성에 실패했습니다.')
       }
-      console.log('🎯 [QR Generate] API 응답 qrData:', result.qrData)
-      console.log('🔍 [QR Generate] sessionId:', result.qrData.sessionId)
-      setQrData(result.qrData)
+      const parsed = QRCodeGenerator.parseQRData(result.session.qrCode)
+      if (!parsed) {
+        throw new Error('서버에서 반환한 QR 데이터가 유효하지 않습니다.')
+      }
+
+      console.log('🎯 [Session Create] API 응답 세션:', result.session)
+      console.log('🔍 [Session Create] sessionId:', parsed.sessionId)
+      setQrData({
+        ...parsed,
+        expiresAt: result.session.qrCodeExpiresAt
+      })
     } catch (error: unknown) {
       console.error('QR generation error:', error)
       const message = error instanceof Error ? error.message : 'QR코드 생성 중 오류가 발생했습니다.'

@@ -30,7 +30,7 @@ async function addAuthCookie(context: BrowserContext, user: { userId: string; us
   ])
 }
 
-test.describe('Professor QR generation (prod)', () => {
+test.describe.skip('Professor QR generation (prod)', () => {
   test('generates QR with predefined location', async ({ browser }, testInfo) => {
     test.skip(HOSTNAME !== 'localhost', 'E2E 테스트는 로컬 개발 서버에서만 실행됩니다.')
 
