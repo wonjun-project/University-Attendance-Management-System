@@ -60,29 +60,40 @@ function ScanPageContent() {
       console.warn('QR code is missing courseId; skipping auto-enrollment')
     }
 
-    console.log('📍 Sending check-in request with data:', {
+    console.log('📍 [Scan Page] 체크인 요청 전송:', {
       sessionId: qrData.sessionId,
+      sessionIdType: typeof qrData.sessionId,
       latitude,
       longitude,
       accuracy
     })
+
+    const checkInData = {
+      sessionId: qrData.sessionId,
+      latitude,
+      longitude,
+      accuracy
+    }
+
+    console.log('📨 [Scan Page] API 호출 전 데이터:', checkInData)
 
     const response = await fetch('/api/attendance/checkin', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        sessionId: qrData.sessionId,
-        latitude,
-        longitude,
-        accuracy
-      })
+      body: JSON.stringify(checkInData)
     })
 
     const result = await response.json()
+    console.log('📩 [Scan Page] API 응답:', {
+      ok: response.ok,
+      status: response.status,
+      result
+    })
 
     if (!response.ok) {
+      console.error('❌ [Scan Page] 체크인 실패:', result.error)
       throw new Error(result.error || '출석 체크에 실패했습니다.')
     }
 
@@ -90,6 +101,13 @@ function ScanPageContent() {
   }, [])
 
   const handleScanSuccess = async (qrData: QRCodeData) => {
+    console.log('🎯 [Scan Page] QR 스캔 성공:', {
+      sessionId: qrData.sessionId,
+      courseId: qrData.courseId,
+      type: qrData.type,
+      baseUrl: qrData.baseUrl
+    })
+
     setScannerActive(false)
     setProcessing(true)
     setError('')

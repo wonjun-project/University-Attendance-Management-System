@@ -331,7 +331,19 @@ export async function POST(request: NextRequest) {
     console.log('✅ Session created successfully with ID:', sessionId)
 
     const baseUrl = buildBaseUrl(request)
-    const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`
+
+    // QR 데이터 객체 생성 (JSON 형태)
+    const qrDataObject = {
+      sessionId,
+      courseId: resolvedCourse.id,
+      expiresAt: expiresAt.toISOString(),
+      type: 'attendance' as const,
+      baseUrl
+    }
+
+    // JSON 문자열로 변환하여 DB에 저장
+    const qrCodeString = JSON.stringify(qrDataObject)
+    console.log('📋 QR 코드 데이터 (JSON):', qrCodeString.substring(0, 100) + '...')
 
     const { error: updateError } = await supabase
       .from('class_sessions')
@@ -344,14 +356,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      qrData: {
-        sessionId,
-        courseId: resolvedCourse.id,
-        expiresAt: expiresAt.toISOString(),
-        type: 'attendance' as const,
-        baseUrl
-      },
-      qrCode: qrCodeString,
+      qrData: qrDataObject,
+      qrCode: qrCodeString,  // 이제 JSON 문자열
       expiresAt: expiresAt.toISOString(),
       courseName: resolvedCourse.name,
       courseCode: resolvedCourse.courseCode,

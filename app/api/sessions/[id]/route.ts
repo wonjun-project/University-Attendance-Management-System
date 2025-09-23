@@ -151,7 +151,16 @@ export async function GET(
         baseUrl: (() => {
           try {
             if (!normalizedSession.qr_code) return null
-            return new URL(normalizedSession.qr_code).origin
+            // QR 코드가 JSON인 경우 파싱하여 baseUrl 추출
+            if (normalizedSession.qr_code.startsWith('{')) {
+              const parsed = JSON.parse(normalizedSession.qr_code)
+              return parsed.baseUrl || null
+            }
+            // 이전 호환성을 위해 URL 형태도 처리
+            if (normalizedSession.qr_code.startsWith('http')) {
+              return new URL(normalizedSession.qr_code).origin
+            }
+            return null
           } catch {
             return null
           }

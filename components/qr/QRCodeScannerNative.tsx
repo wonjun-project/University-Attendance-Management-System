@@ -85,18 +85,28 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
       addLog(`QR code detected: ${raw.substring(0, 60)}...`)
 
       try {
+        console.log('🔍 [QR Scanner] QR 데이터 분석:', {
+          raw: raw.substring(0, 100),
+          startsWithHttp: raw.startsWith('http'),
+          isJson: raw.startsWith('{')
+        })
+
         // 1) 우선 JSON 기반 포맷 시도
         let parsed = QRCodeGenerator.parseQRData(raw)
 
         if (parsed) {
-          console.log('✅ QR code parsed as JSON:', parsed)
-          addLog(`JSON parsed successfully: sessionId=${parsed.sessionId}`)
+          console.log('✅ [QR Scanner] JSON으로 파싱 성공:', {
+            sessionId: parsed.sessionId,
+            courseId: parsed.courseId,
+            type: parsed.type
+          })
+          addLog(`JSON 파싱 성공: sessionId=${parsed.sessionId}`)
         }
 
         // 2) JSON이 아니면 URL/텍스트 폴백 파싱
         if (!parsed) {
-          console.log('⚠️ QR code is not JSON, raw data:', raw)
-          addLog('QR is not JSON. Trying URL/text fallback...')
+          console.log('⚠️ [QR Scanner] JSON이 아님, URL/텍스트 폴백 시도:', raw.substring(0, 100))
+          addLog('JSON 아님. URL/텍스트 폴백 시도...')
 
           let sessionId: string | null = null
           try {
@@ -104,7 +114,23 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
               const u = new URL(raw)
               const parts = u.pathname.split('/').filter(Boolean)
               // 예상 패턴: /student/attendance/<sessionId>
-              sessionId = parts[parts.length - 1] || null
+              // 또는 /student/scan?sessionId=<sessionId>
+              const scanIndex = parts.indexOf('scan')
+              const attendanceIndex = parts.indexOf('attendance')
+
+              if (scanIndex >= 0 && u.searchParams.has('sessionId')) {
+                sessionId = u.searchParams.get('sessionId')
+              } else if (attendanceIndex >= 0 && attendanceIndex < parts.length - 1) {
+                sessionId = parts[attendanceIndex + 1]
+              } else {
+                sessionId = parts[parts.length - 1] || null
+              }
+
+              console.log('🆔 [QR Scanner] URL에서 sessionId 추출:', {
+                url: raw,
+                extractedSessionId: sessionId,
+                parts
+              })
             } else {
               // session_ 으로 시작하는 단순 문자열 처리
               const match = raw.match(/session_[A-Za-z0-9_-]+/)
@@ -122,9 +148,18 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
           }
 
           // 세션 정보를 서버에서 조회하여 표준 형태로 구성
-          addLog(`Fetching session info for ${sessionId} ...`)
+          console.log('🚀 [QR Scanner] 세션 정보 조회:', sessionId)
+          addLog(`세션 정보 조회 중: ${sessionId}`)
+
           const resp = await fetch(`/api/sessions/${sessionId}`)
           const data = await resp.json()
+
+          console.log('📦 [QR Scanner] 세션 조회 결과:', {
+            ok: resp.ok,
+            status: resp.status,
+            hasSession: !!data?.session,
+            error: data?.error
+          })
 
           if (!resp.ok) {
             const msg = data?.error || '세션 정보를 가져올 수 없습니다.'
@@ -165,7 +200,13 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
         }
 
         // 성공 처리
-        addLog('QR validation successful!')
+        console.log('✨ [QR Scanner] 최종 파싱된 데이터:', {
+          sessionId: parsed.sessionId,
+          courseId: parsed.courseId,
+          type: parsed.type,
+          baseUrl: parsed.baseUrl
+        })
+        addLog('QR 검증 성공!')
         if (navigator.vibrate) navigator.vibrate(200)
         stopCamera()
         setStatus('scanning')

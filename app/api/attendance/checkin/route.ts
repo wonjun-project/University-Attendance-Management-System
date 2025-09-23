@@ -100,7 +100,15 @@ export async function POST(request: NextRequest) {
     const longitude = Number(body.longitude)
     const accuracy = Number(body.accuracy ?? 0)
 
-    console.log('📍 Check-in request received:', { sessionId, latitude, longitude, accuracy })
+    console.log('🎯 [CheckIn] 요청 수신:', {
+      sessionId,
+      sessionIdType: typeof sessionId,
+      sessionIdLength: sessionId?.length,
+      latitude,
+      longitude,
+      accuracy,
+      timestamp: new Date().toISOString()
+    })
 
     if (!sessionId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
       console.error('❌ Invalid request parameters:', { sessionId, latitude, longitude })
@@ -113,7 +121,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient()
 
-    console.log('🔍 Looking up session with ID:', sessionId)
+    console.log('🔍 [CheckIn] 세션 조회 시작...')
+
+    // 먼저 모든 활성 세션 조회해서 디버깅
+    const { data: allActiveSessions } = await supabase
+      .from('class_sessions')
+      .select('id, status, created_at')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    console.log('📋 [CheckIn] 현재 활성 세션들:', allActiveSessions?.map(s => ({
+      id: s.id,
+      status: s.status,
+      created_at: s.created_at,
+      matchesRequest: s.id === sessionId
+    })))
 
     const { data: session, error: sessionError } = await supabase
       .from('class_sessions')
@@ -134,17 +157,45 @@ export async function POST(request: NextRequest) {
       .maybeSingle<SupabaseSessionRow>()
 
     if (sessionError) {
-      console.error('❌ Session lookup error:', sessionError)
-      console.error('❌ Failed to find session with ID:', sessionId)
+      console.error('❌ [CheckIn] 세션 조회 에러:', {
+        sessionId,
+        errorCode: sessionError.code,
+        errorMessage: sessionError.message,
+        errorDetails: sessionError.details
+      })
+
+      // 세션이 다른 상태인지 확인
+      const { data: anySession } = await supabase
+        .from('class_sessions')
+        .select('id, status, qr_code_expires_at')
+        .eq('id', sessionId)
+        .maybeSingle()
+
+      if (anySession) {
+        console.error('⚠️ [CheckIn] 세션은 존재하지만 조건 불일치:', {
+          id: anySession.id,
+          status: anySession.status,
+          expires_at: anySession.qr_code_expires_at,
+          isExpired: new Date(anySession.qr_code_expires_at) < new Date()
+        })
+      } else {
+        console.error('⚠️ [CheckIn] 세션 자체가 존재하지 않음:', sessionId)
+      }
+
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
     if (!session) {
-      console.error('❌ No session found with ID:', sessionId)
+      console.error('❌ [CheckIn] 세션 데이터가 null')
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    console.log('✅ Session found:', { id: session.id, courseId: session.course_id, status: session.status })
+    console.log('✅ [CheckIn] 세션 조회 성공:', {
+      sessionId: session.id,
+      courseId: session.course_id,
+      status: session.status,
+      expires_at: session.qr_code_expires_at
+    })
 
     const sessionRow = session
 
