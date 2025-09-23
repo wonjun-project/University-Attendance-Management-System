@@ -57,8 +57,24 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function buildBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'
+function buildBaseUrl(request: NextRequest): string {
+  const env = process.env.NEXT_PUBLIC_BASE_URL
+  if (env) {
+    return env.replace(/\/$/, '')
+  }
+
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`.replace(/\/$/, '')
+  }
+
+  const origin = request.nextUrl?.origin
+  if (origin) {
+    return origin.replace(/\/$/, '')
+  }
+
+  return 'http://localhost:3000'
 }
 
 async function resolvePredefinedLocation(
@@ -313,7 +329,7 @@ export async function POST(request: NextRequest) {
 
     const sessionId = sessionInsert.id
 
-    const baseUrl = buildBaseUrl()
+    const baseUrl = buildBaseUrl(request)
     const qrCodeString = `${baseUrl}/student/attendance/${sessionId}`
 
     const { error: updateError } = await supabase
