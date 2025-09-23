@@ -30,6 +30,36 @@ export type Database = {
           password_hash?: string
           created_at?: string
           updated_at?: string
+      }
+      Relationships: []
+    }
+      user_profiles: {
+        Row: {
+          id: string
+          email: string
+          student_id: string | null
+          name: string
+          role: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          email: string
+          student_id?: string | null
+          name: string
+          role: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          student_id?: string | null
+          name?: string
+          role?: string
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
