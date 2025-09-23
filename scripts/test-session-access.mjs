@@ -7,8 +7,10 @@
  * 사용법: node scripts/test-session-access.js
  */
 
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -183,7 +185,7 @@ async function testSessionAccess(sessionId) {
   // Anon 키로 세션 조회 시도
   if (anonKey) {
     const supabase = createClient(supabaseUrl, anonKey);
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('class_sessions')
       .select('id, status')
       .eq('id', sessionId)
