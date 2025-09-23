@@ -142,6 +142,15 @@ export async function GET(
         expiresAt: normalizedSession.qr_code_expires_at,
         status: normalizedSession.status,
         date: normalizedSession.date,
+        qrCodeUrl: normalizedSession.qr_code ?? null,
+        baseUrl: (() => {
+          try {
+            if (!normalizedSession.qr_code) return null
+            return new URL(normalizedSession.qr_code).origin
+          } catch {
+            return null
+          }
+        })(),
         location: {
           lat: classroomLocation.latitude,
           lng: classroomLocation.longitude,

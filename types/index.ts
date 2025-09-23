@@ -95,4 +95,5 @@ export interface QRCodeData {
   session_id: string
   course_id: string
   expires_at: string
+  base_url?: string
 }

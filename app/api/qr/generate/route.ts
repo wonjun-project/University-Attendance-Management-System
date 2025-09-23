@@ -331,7 +331,8 @@ export async function POST(request: NextRequest) {
         sessionId,
         courseId: resolvedCourse.id,
         expiresAt: expiresAt.toISOString(),
-        type: 'attendance' as const
+        type: 'attendance' as const,
+        baseUrl
       },
       qrCode: qrCodeString,
       expiresAt: expiresAt.toISOString(),

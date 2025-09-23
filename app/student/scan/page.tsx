@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { QRCodeScannerNative } from '@/components/qr/QRCodeScannerNative'
 import { QRCodeData } from '@/lib/qr/qr-generator'
@@ -14,29 +14,22 @@ export default function ScanPage() {
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState(false)
+  const searchParams = useSearchParams()
+  const sessionIdParam = searchParams.get('sessionId')
+  const hasProcessedSessionRef = useRef(false)
 
-  if (loading || !user || user.role !== 'student') {
-    return <div className="min-h-screen bg-gray-50" />
-  }
-
-  const handleScanSuccess = async (qrData: QRCodeData) => {
-    setScannerActive(false)
-    setProcessing(true)
-    setError('')
-
-    try {
-      // Get user's current location
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0 // 캐시 사용 안함 - 항상 새로운 위치 요청
-        })
+  const runCheckIn = useCallback(async (qrData: QRCodeData) => {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0 // 캐시 사용 안함 - 항상 새로운 위치 요청
       })
+    })
 
-      const { latitude, longitude, accuracy } = position.coords
+    const { latitude, longitude, accuracy } = position.coords
 
-      // 먼저 해당 강의에 자동 등록 시도 (MVP용)
+    if (qrData.courseId) {
       try {
         const enrollResponse = await fetch('/api/enrollment/auto', {
           method: 'POST',
@@ -54,34 +47,51 @@ export default function ScanPage() {
         }
       } catch (enrollError) {
         console.warn('Auto-enrollment failed:', enrollError)
-        // 등록 실패해도 체크인은 시도
       }
+    } else {
+      console.warn('QR code is missing courseId; skipping auto-enrollment')
+    }
 
-      // Check in to attendance
-      const response = await fetch('/api/attendance/checkin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId: qrData.sessionId,
-          latitude,
-          longitude,
-          accuracy
-        })
+    const response = await fetch('/api/attendance/checkin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: qrData.sessionId,
+        latitude,
+        longitude,
+        accuracy
       })
+    })
 
-      const result = await response.json()
+    const result = await response.json()
 
-      if (!response.ok) {
-        throw new Error(result.error || '출석 체크에 실패했습니다.')
+    if (!response.ok) {
+      throw new Error(result.error || '출석 체크에 실패했습니다.')
+    }
+
+    return result
+  }, [])
+
+  const handleScanSuccess = async (qrData: QRCodeData) => {
+    setScannerActive(false)
+    setProcessing(true)
+    setError('')
+
+    try {
+      if (typeof window !== 'undefined' && qrData.baseUrl && qrData.baseUrl !== window.location.origin) {
+        setProcessing(false)
+        window.location.href = `${qrData.baseUrl}/student/scan?sessionId=${encodeURIComponent(qrData.sessionId)}`
+        return
       }
+
+      const result = await runCheckIn(qrData)
 
       setSuccess(true)
       
-      // Redirect to attendance tracking page after 2 seconds
       setTimeout(() => {
-        router.push(`/student/attendance/${result.sessionId}`)
+        router.push(`/student/attendance/${result.sessionId ?? qrData.sessionId}`)
       }, 2000)
 
     } catch (error: unknown) {
@@ -123,6 +133,73 @@ export default function ScanPage() {
   const handleScanError = (error: string) => {
     setError(error)
     setScannerActive(false)
+  }
+
+  useEffect(() => {
+    if (!sessionIdParam || hasProcessedSessionRef.current) {
+      return
+    }
+
+    hasProcessedSessionRef.current = true
+    setScannerActive(false)
+    setProcessing(true)
+    setError('')
+
+    let redirected = false
+    let completed = false
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/sessions/${sessionIdParam}`)
+        const data = await response.json()
+
+        if (!response.ok || !data?.session) {
+          throw new Error(data?.error || '세션 정보를 불러올 수 없습니다.')
+        }
+
+        const sessionInfo = data.session
+        const qrData: QRCodeData = {
+          sessionId: sessionInfo.id,
+          courseId: sessionInfo.courseId || sessionInfo.course_id || '',
+          expiresAt: sessionInfo.expiresAt || sessionInfo.qr_code_expires_at || new Date(Date.now() + 25 * 60 * 1000).toISOString(),
+          type: 'attendance',
+          baseUrl: sessionInfo.baseUrl || sessionInfo.base_url || (typeof window !== 'undefined' ? window.location.origin : undefined)
+        }
+
+        if (typeof window !== 'undefined' && qrData.baseUrl && qrData.baseUrl !== window.location.origin) {
+          redirected = true
+          setProcessing(false)
+          window.location.href = `${qrData.baseUrl}/student/scan?sessionId=${encodeURIComponent(qrData.sessionId)}`
+          return
+        }
+
+        await runCheckIn(qrData)
+        setSuccess(true)
+        setTimeout(() => {
+          router.push(`/student/attendance/${sessionIdParam}`)
+        }, 2000)
+        completed = true
+      } catch (err) {
+        console.error('Direct session check-in error:', err)
+        if (err instanceof Error) {
+          setError(err.message || '출석 체크 중 오류가 발생했습니다.')
+        } else {
+          setError('출석 체크 중 오류가 발생했습니다.')
+        }
+        router.replace('/student/scan')
+      } finally {
+        if (!redirected) {
+          setProcessing(false)
+          if (!completed) {
+            hasProcessedSessionRef.current = false
+          }
+        }
+      }
+    })()
+  }, [sessionIdParam, runCheckIn, router])
+
+  if (loading || !user || user.role !== 'student') {
+    return <div className="min-h-screen bg-gray-50" />
   }
 
   if (processing) {

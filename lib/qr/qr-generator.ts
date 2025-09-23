@@ -15,6 +15,7 @@ export interface QRCodeData {
   courseId: string
   expiresAt: string
   type: 'attendance'
+  baseUrl?: string
 }
 
 export class QRCodeGenerator {

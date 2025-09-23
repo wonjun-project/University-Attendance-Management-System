@@ -129,11 +129,23 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
           }
 
           const s = data.session
+          const detectedBaseUrl = s?.baseUrl || s?.base_url || (() => {
+            try {
+              if (typeof s?.qrCodeUrl === 'string') {
+                return new URL(s.qrCodeUrl).origin
+              }
+            } catch {
+              // ignore URL parsing errors
+            }
+            return typeof window !== 'undefined' ? window.location.origin : undefined
+          })()
+
           parsed = {
             sessionId: s.id,
             courseId: s.courseId || s.course_id || '',
             expiresAt: s.expiresAt || s.qr_code_expires_at || new Date(Date.now() + 25 * 60 * 1000).toISOString(),
             type: 'attendance' as const,
+            baseUrl: detectedBaseUrl,
           }
         }
 
