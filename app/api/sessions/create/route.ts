@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase-admin'
+import type { Database } from '@/types/supabase'
 
 const FALLBACK_LOCATION = {
   latitude: 36.6372,
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
           name: fallbackName,
           course_code: fallbackCode,
           professor_id: user.userId,
-          schedule: [] as any, // 빈 스케줄 배열
+          schedule: [] as unknown as Database['public']['Tables']['courses']['Insert']['schedule'], // 빈 스케줄 배열
           location: classroomLocation.address,
           location_latitude: classroomLocation.latitude,
           location_longitude: classroomLocation.longitude,

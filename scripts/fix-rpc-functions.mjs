@@ -4,47 +4,29 @@
  * Supabase에서 누락된 RPC 함수와 테이블 컬럼을 생성합니다.
  */
 
-const { createClient } = require('@supabase/supabase-js');
-const dotenv = require('dotenv');
-const path = require('path');
+// import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // .env.local 파일 로드
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// 환경 변수 체크 (선택사항)
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+// const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ 환경 변수가 설정되지 않았습니다. .env.local 파일을 확인하세요.');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
-
-async function executeSql(sql, description) {
-  try {
-    console.log(`\n📝 실행 중: ${description}`);
-    const { data, error } = await supabase.rpc('exec_sql', { query: sql });
-
-    if (error) {
-      // exec_sql RPC가 없는 경우 대체 방법 시도
-      console.warn(`⚠️ exec_sql RPC 사용 불가, 직접 실행 시도...`);
-      // Supabase에서는 직접 SQL 실행이 제한되므로 대체 방법 필요
-      return { success: false, error: error.message };
-    }
-
-    console.log(`✅ 성공: ${description}`);
-    return { success: true, data };
-  } catch (err) {
-    console.error(`❌ 실패: ${description}`, err.message);
-    return { success: false, error: err.message };
-  }
-}
+// Supabase 클라이언트는 직접 DDL 실행이 제한되므로 사용하지 않음
+// const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+//   auth: {
+//     autoRefreshToken: false,
+//     persistSession: false
+//   }
+// });
 
 async function fixDatabase() {
   console.log('🚀 데이터베이스 수정 시작...\n');
@@ -187,20 +169,24 @@ ${insertDataSQL}
 -- RLS 정책 추가
 ALTER TABLE predefined_locations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Allow authenticated users to read predefined locations"
+-- 기존 정책 삭제 (존재하는 경우)
+DROP POLICY IF EXISTS "Allow authenticated users to read predefined locations" ON predefined_locations;
+DROP POLICY IF EXISTS "Allow service role to manage predefined locations" ON predefined_locations;
+
+-- 새 정책 생성
+CREATE POLICY "Allow authenticated users to read predefined locations"
 ON predefined_locations FOR SELECT
 TO authenticated
 USING (is_active = true);
 
-CREATE POLICY IF NOT EXISTS "Allow service role to manage predefined locations"
+CREATE POLICY "Allow service role to manage predefined locations"
 ON predefined_locations FOR ALL
 TO service_role
 USING (true);
 `;
 
   // 마이그레이션 파일 생성
-  const fs = require('fs');
-  const migrationPath = path.join(__dirname, '..', 'database', 'migrations', '011_fix_rpc_and_schema.sql');
+  const migrationPath = path.join(__dirname, '..', 'database', 'migrations', '013_fix_rpc_and_schema_esm.sql');
 
   fs.writeFileSync(migrationPath, migrationContent);
   console.log(`✅ 마이그레이션 파일 생성됨: ${migrationPath}`);
