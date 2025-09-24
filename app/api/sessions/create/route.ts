@@ -98,6 +98,11 @@ export async function POST(request: NextRequest) {
 
       if (courseError) {
         console.error('[Session Create] 강의 조회 실패:', courseError)
+        console.error('[Session Create] 강의 조회 상세 오류:', {
+          courseId,
+          error: courseError.message,
+          details: courseError.details
+        })
       } else if (existingCourse && (!existingCourse.professor_id || existingCourse.professor_id === user.userId)) {
         course = existingCourse
       }
@@ -156,6 +161,7 @@ export async function POST(request: NextRequest) {
           name: fallbackName,
           course_code: fallbackCode,
           professor_id: user.userId,
+          classroom_location: classroomLocation as unknown as Database['public']['Tables']['courses']['Insert']['classroom_location'], // 필수 JSONB 필드
           schedule: [] as unknown as Database['public']['Tables']['courses']['Insert']['schedule'], // 빈 스케줄 배열
           location: classroomLocation.address,
           location_latitude: classroomLocation.latitude,
@@ -167,7 +173,16 @@ export async function POST(request: NextRequest) {
 
       if (insertCourseError || !insertedCourse) {
         console.error('[Session Create] 임시 강의 생성 실패:', insertCourseError)
-        return NextResponse.json({ error: '강의를 찾을 수 없습니다. 관리자에게 문의하세요.' }, { status: 404 })
+        console.error('[Session Create] 상세 오류:', {
+          error: insertCourseError?.message,
+          details: insertCourseError?.details,
+          hint: insertCourseError?.hint,
+          code: insertCourseError?.code
+        })
+        return NextResponse.json({
+          error: '강의를 찾을 수 없습니다. 관리자에게 문의하세요.',
+          details: insertCourseError?.message || '알 수 없는 오류'
+        }, { status: 404 })
       }
 
       course = insertedCourse
