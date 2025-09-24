@@ -154,22 +154,65 @@ export async function POST(request: NextRequest) {
         address: requestLocation.address ?? FALLBACK_LOCATION.address
       }
 
-      const { data: insertedCourse, error: insertCourseError } = await supabase
+      // JSONB 필드를 위해 객체를 직접 전달 (Supabase가 자동 변환)
+      const courseInsertData = {
+        id: newCourseId,
+        name: fallbackName,
+        course_code: fallbackCode,
+        professor_id: user.userId,
+        classroom_location: {
+          latitude: classroomLocation.latitude,
+          longitude: classroomLocation.longitude,
+          radius: classroomLocation.radius,
+          address: classroomLocation.address
+        },
+        schedule: []
+      }
+
+      // location 관련 컬럼이 있는 경우를 위한 추가 필드
+      const extendedInsertData = {
+        ...courseInsertData,
+        location: classroomLocation.address,
+        location_latitude: classroomLocation.latitude,
+        location_longitude: classroomLocation.longitude,
+        location_radius: classroomLocation.radius
+      }
+
+      console.log('[Session Create] 강의 생성 시도:', {
+        courseId: newCourseId,
+        data: courseInsertData
+      })
+
+      // 먼저 전체 데이터로 시도
+      let insertResult = await supabase
         .from('courses')
-        .insert({
+        .insert(extendedInsertData)
+        .select('id, name, course_code, location, location_latitude, location_longitude, location_radius')
+        .single()
+
+      // classroom_location이나 schedule 관련 오류 시 최소 데이터로 재시도
+      if (insertResult.error &&
+          (insertResult.error.message?.includes('classroom_location') ||
+           insertResult.error.message?.includes('schedule'))) {
+        console.log('[Session Create] 필수 필드 오류, 최소 데이터로 재시도')
+
+        const minimalInsertData = {
           id: newCourseId,
           name: fallbackName,
           course_code: fallbackCode,
           professor_id: user.userId,
-          classroom_location: classroomLocation as unknown as Database['public']['Tables']['courses']['Insert']['classroom_location'], // 필수 JSONB 필드
-          schedule: [] as unknown as Database['public']['Tables']['courses']['Insert']['schedule'], // 빈 스케줄 배열
-          location: classroomLocation.address,
-          location_latitude: classroomLocation.latitude,
-          location_longitude: classroomLocation.longitude,
-          location_radius: classroomLocation.radius
-        })
-        .select('id, name, course_code, location, location_latitude, location_longitude, location_radius')
-        .single()
+          schedule: [] as any,
+          classroom_location: {} as any
+        }
+
+        insertResult = await supabase
+          .from('courses')
+          .insert(minimalInsertData)
+          .select('id, name, course_code')
+          .single()
+      }
+
+      const { data: insertedCourse, error: insertCourseError } = insertResult
 
       if (insertCourseError || !insertedCourse) {
         console.error('[Session Create] 임시 강의 생성 실패:', insertCourseError)
@@ -177,7 +220,10 @@ export async function POST(request: NextRequest) {
           error: insertCourseError?.message,
           details: insertCourseError?.details,
           hint: insertCourseError?.hint,
-          code: insertCourseError?.code
+          code: insertCourseError?.code,
+          fallbackName,
+          fallbackCode,
+          professorId: user.userId
         })
         return NextResponse.json({
           error: '강의를 찾을 수 없습니다. 관리자에게 문의하세요.',
