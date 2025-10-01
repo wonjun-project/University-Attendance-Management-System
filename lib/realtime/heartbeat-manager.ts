@@ -21,6 +21,8 @@ export interface HeartbeatResponse {
   distance?: number;
   allowedRadius?: number;
   sessionEnded?: boolean;
+  statusChanged?: boolean;
+  newStatus?: 'present' | 'late' | 'left_early' | 'absent';
   message?: string;
   error?: string;
 }

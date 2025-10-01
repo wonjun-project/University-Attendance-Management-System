@@ -68,6 +68,25 @@ export default function AttendancePage() {
       })
       setLastLocationUpdate(new Date(data.location.timestamp))
 
+      // 조퇴 처리 감지
+      if (data.response.statusChanged && data.response.newStatus === 'left_early') {
+        console.log('🚪 조퇴 처리됨 - Heartbeat 중지')
+        setLocationError(`🚪 ${data.response.message || '강의실 범위를 벗어나 조퇴 처리되었습니다.'}`)
+        setTrackingStatus('out_of_range')
+
+        // 출석 상태 업데이트
+        if (attendanceData) {
+          setAttendanceData({
+            ...attendanceData,
+            status: 'left_early'
+          })
+        }
+
+        // Heartbeat 중지
+        stopHeartbeatTracking()
+        return
+      }
+
       // 추적 상태 업데이트
       setTrackingStatus(data.response.locationValid ? 'in_range' : 'out_of_range')
 
@@ -93,7 +112,7 @@ export default function AttendancePage() {
       setLocationError(data.error)
       setTrackingStatus('out_of_range')
     }
-  }, [stopHeartbeatTracking])
+  }, [stopHeartbeatTracking, attendanceData])
 
   // Heartbeat 추적 시작
   const startHeartbeatTracking = useCallback(

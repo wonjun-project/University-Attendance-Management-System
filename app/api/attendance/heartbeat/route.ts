@@ -120,10 +120,13 @@ export async function POST(request: NextRequest) {
 
     // 3. 출석 상태 확인 (present가 아니면 heartbeat 중지)
     if (attendanceData.status !== 'present') {
+      console.log(`🛑 Heartbeat 중지: 출석 상태가 '${attendanceData.status}'`);
       return NextResponse.json({
-        success: false,
-        error: `출석 상태가 '${attendanceData.status}'이므로 위치 추적이 중지됩니다.`
-      }, { status: 400 });
+        success: true,
+        locationValid: false,
+        sessionEnded: true,
+        message: `출석 상태가 '${attendanceData.status}'이므로 위치 추적이 중지됩니다.`
+      }, { status: 200 });
     }
 
     // 4. 강의실 위치 정보 추출
@@ -198,8 +201,62 @@ export async function POST(request: NextRequest) {
     if (!locationValid) {
       console.warn(`⚠️ 위치 이탈 감지: ${user.name} - ${Math.round(distance)}m (허용: ${classroomLocation.radius}m)`);
 
-      // 즉시 조퇴 처리하지 않고 경고만 전송
-      // 추후 5분간 지속 이탈 시 조퇴 처리하는 로직은 별도 구현
+      // 최근 location_logs 조회하여 연속 이탈 확인 (현재 기록 포함하여 2개 조회)
+      const { data: recentLogs, error: logsError } = await supabase
+        .from('location_logs')
+        .select('is_valid')
+        .eq('attendance_id', attendanceId)
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      if (logsError) {
+        console.error('최근 위치 로그 조회 실패:', logsError);
+      }
+
+      // 연속 2회 이상 이탈 감지 시 조퇴 처리
+      if (recentLogs && recentLogs.length >= 2 && recentLogs.every(log => !log.is_valid)) {
+        console.warn(`🚪 조퇴 처리 시작: ${user.name} - 연속 ${recentLogs.length}회 범위 이탈 감지`);
+
+        // attendances 테이블 업데이트: 조퇴 처리
+        const { error: updateError } = await supabase
+          .from('attendances')
+          .update({
+            status: 'left_early',
+            check_out_time: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', attendanceId);
+
+        if (updateError) {
+          console.error('조퇴 처리 실패:', updateError);
+          return NextResponse.json({
+            success: false,
+            error: '조퇴 처리 중 오류가 발생했습니다.'
+          }, { status: 500 });
+        }
+
+        console.log(`✅ 조퇴 처리 완료: ${user.name} - 거리: ${Math.round(distance)}m`);
+
+        return NextResponse.json({
+          success: true,
+          locationValid: false,
+          statusChanged: true,
+          newStatus: 'left_early',
+          distance: Math.round(distance),
+          allowedRadius: classroomLocation.radius,
+          sessionEnded: false,
+          message: `강의실 범위를 ${Math.round(distance)}m 벗어나 조퇴 처리되었습니다.`,
+          metadata: {
+            source,
+            isBackground,
+            timestamp: new Date().toISOString(),
+            consecutiveViolations: recentLogs.length
+          }
+        });
+      }
+
+      // 첫 번째 이탈이거나 연속 이탈이 아닌 경우 경고만 전송
+      console.warn(`⚠️ 위치 이탈 경고: ${user.name} - 연속 이탈 ${recentLogs?.length || 0}회`);
     }
 
     // 9. 성공 응답
