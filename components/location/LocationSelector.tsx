@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import CurrentLocationButton from './CurrentLocationButton'
+import ManualLocationInput from './ManualLocationInput'
 import PredefinedLocations, { type LocationOption as PredefinedLocationOption } from './PredefinedLocations'
 import { Input } from '@/components/ui'
 
-export type LocationType = 'predefined' | 'current'
+export type LocationType = 'predefined' | 'current' | 'manual'
 
 const MIN_RADIUS = 100
 const MAX_RADIUS = 500
@@ -78,18 +79,18 @@ function LocationSelector({
     console.log('🎯 Current location update:', coords)
     console.log('🎯 Current selectedType:', selectedType)
     console.log('🎯 Current value:', value)
-    
+
     // 현재 위치 버튼이 활성화되어 있을 때만 호출되므로 selectedType 체크 없이 진행
     // React 상태 업데이트는 비동기이므로 setSelectedType('current') 후 즉시 체크하면 이전 값일 수 있음
     console.log('🎯 Processing current location (bypassing selectedType check due to React async state)')
-    
+
     // 적응형 반경 사용 (GPS 정확도 기반으로 자동 계산된 값) + 안전범위 보정
     const calculatedRadius = typeof coords.adaptiveRadius === 'number'
       ? coords.adaptiveRadius
       : Number(radius) || MIN_RADIUS
     const normalizedRadius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, Math.round(calculatedRadius)))
     setRadius(normalizedRadius.toString())
-    
+
     const locationData: LocationData = {
       latitude: coords.latitude,
       longitude: coords.longitude,
@@ -99,8 +100,23 @@ function LocationSelector({
         : '현재 위치',
       locationType: 'current'
     }
-    
+
     console.log('🎯 Calling onChange with current location:', locationData)
+    onChange(locationData)
+  }
+
+  const handleManualLocationUpdate = (coords: { latitude: number; longitude: number; radius?: number }) => {
+    console.log('✏️ Manual location update:', coords)
+
+    const locationData: LocationData = {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      radius: coords.radius || 100,
+      displayName: '수동 입력 위치',
+      locationType: 'manual'
+    }
+
+    console.log('✏️ Calling onChange with manual location:', locationData)
     onChange(locationData)
   }
 
@@ -191,12 +207,47 @@ function LocationSelector({
             />
             <div className="flex-1 min-w-0">
               <label htmlFor="current" className="block text-sm font-medium text-gray-700 mb-2">
-                🎯 현재 위치 사용
+                🎯 현재 위치 사용 (GPS)
               </label>
               <div className={selectedType !== 'current' ? 'opacity-50 pointer-events-none' : ''}>
                 <CurrentLocationButton
                   onLocationUpdate={handleCurrentLocationUpdate}
                   disabled={disabled || selectedType !== 'current'}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Manual Location Option */}
+          <div className="flex items-start gap-3">
+            <input
+              type="radio"
+              id="manual"
+              name="locationType"
+              checked={selectedType === 'manual'}
+              onChange={(e) => {
+                console.log('📻 Manual radio clicked:', e.target.checked)
+                if (e.target.checked) {
+                  console.log('✏️ Switching to manual location mode')
+                  setSelectedType('manual')
+                  // 수동 입력 모드로 전환할 때 이전 데이터 초기화
+                  if (value && value.locationType !== 'manual') {
+                    console.log('✏️ Clearing previous location data')
+                    onChange(null)
+                  }
+                }
+              }}
+              disabled={disabled}
+              className="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500"
+            />
+            <div className="flex-1 min-w-0">
+              <label htmlFor="manual" className="block text-sm font-medium text-gray-700 mb-2">
+                ✏️ 직접 입력 (GPS 대체)
+              </label>
+              <div className={selectedType !== 'manual' ? 'opacity-50 pointer-events-none' : ''}>
+                <ManualLocationInput
+                  onLocationUpdate={handleManualLocationUpdate}
+                  disabled={disabled || selectedType !== 'manual'}
                 />
               </div>
             </div>

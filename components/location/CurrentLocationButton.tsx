@@ -31,8 +31,21 @@ export default function CurrentLocationButton({
       return
     }
 
+    // HTTPS 체크
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      setError('위치 서비스는 HTTPS 환경에서만 사용 가능합니다. 주소가 https://로 시작하는지 확인해주세요.')
+      console.error('❌ 위치 서비스 HTTPS 필수: 현재 프로토콜 =', window.location.protocol)
+      return
+    }
+
     setLoading(true)
     setError(null)
+
+    console.log('📍 위치 요청 시작:', {
+      protocol: window.location.protocol,
+      hostname: window.location.hostname,
+      userAgent: navigator.userAgent
+    })
 
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -41,8 +54,8 @@ export default function CurrentLocationButton({
           reject,
           {
             enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 0 // 캐시 사용 안함 - 항상 새로운 위치 요청
+            timeout: 30000, // 30초로 증가 (네트워크 환경 고려)
+            maximumAge: 5000 // 5초 캐시 허용 (성능 개선)
           }
         )
       })
@@ -68,25 +81,28 @@ export default function CurrentLocationButton({
       onLocationUpdate(coords)
       
     } catch (error: unknown) {
-      console.error('위치 획득 실패:', error)
+      console.error('❌ 위치 획득 실패:', error)
       if (typeof error === 'object' && error !== null && 'code' in error) {
         const geoError = error as GeolocationPositionError
+        console.error('❌ Geolocation 에러 코드:', geoError.code, '메시지:', geoError.message)
+
         switch (geoError.code) {
           case geoError.PERMISSION_DENIED:
-            setError('위치 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+            setError('위치 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.\n\n[설정 방법]\n- Chrome: 주소창 왼쪽 자물쇠 > 사이트 설정 > 위치\n- Safari: 설정 > Safari > 웹사이트 > 위치')
             break
           case geoError.POSITION_UNAVAILABLE:
-            setError('위치 정보를 사용할 수 없습니다.')
+            setError('위치 정보를 사용할 수 없습니다.\n\n가능한 원인:\n- GPS가 꺼져있거나 신호가 약함\n- 실내에서 GPS 신호를 받지 못함\n- 브라우저의 위치 서비스가 비활성화됨\n\n해결 방법:\n- 기기의 위치 서비스(GPS)가 켜져있는지 확인\n- 실외로 이동하거나 창가로 이동\n- 브라우저를 새로고침 후 재시도')
             break
           case geoError.TIMEOUT:
-            setError('위치 정보 요청이 시간 초과되었습니다.')
+            setError('위치 정보 요청이 시간 초과되었습니다.\n\nGPS 신호가 약하거나 네트워크가 불안정합니다. 잠시 후 다시 시도해주세요.')
             break
           default:
-            setError('위치 정보를 가져오는데 실패했습니다.')
+            setError(`위치 정보를 가져오는데 실패했습니다. (에러 코드: ${geoError.code})`)
             break
         }
       } else {
-        setError('위치 정보를 가져오는데 실패했습니다.')
+        console.error('❌ 알 수 없는 에러:', error)
+        setError('위치 정보를 가져오는데 실패했습니다. 브라우저 콘솔을 확인해주세요.')
       }
     } finally {
       setLoading(false)
@@ -107,7 +123,7 @@ export default function CurrentLocationButton({
       </Button>
 
       {error && (
-        <div className="mt-2 p-3 bg-error-50 border border-error-200 text-error-800 rounded-lg text-sm">
+        <div className="mt-2 p-3 bg-error-50 border border-error-200 text-error-800 rounded-lg text-sm whitespace-pre-line">
           {error}
         </div>
       )}
