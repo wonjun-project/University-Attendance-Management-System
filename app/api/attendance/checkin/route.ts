@@ -61,7 +61,9 @@ interface LocationEvaluation {
 
 function evaluateLocation(studentLat: number, studentLon: number, accuracy: number, classroom: ResolvedLocation): LocationEvaluation {
   const distance = calculateDistance(studentLat, studentLon, classroom.latitude, classroom.longitude)
-  const effectiveDistance = Math.max(0, distance - accuracy)
+  // GPS 정확도에 관계없이 실제 거리만으로 검증 (정확한 거리 기반 검증)
+  // accuracy는 참고용으로만 기록하고, 실제 검증은 distance로만 수행
+  const effectiveDistance = distance
   const allowedRadius = classroom.radius
   const isDevelopment = process.env.NODE_ENV === 'development'
   const isLocationValid = isDevelopment || effectiveDistance <= allowedRadius
