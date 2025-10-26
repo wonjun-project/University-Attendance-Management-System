@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { autoEndSessionIfNeeded } from '@/lib/session/session-service'
+import { calculateDistance } from '@/lib/utils/geo'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -142,21 +143,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. 거리 계산 (Haversine 공식)
-    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-      const R = 6371000; // 지구 반지름 (미터)
-      const φ1 = lat1 * Math.PI/180;
-      const φ2 = lat2 * Math.PI/180;
-      const Δφ = (lat2-lat1) * Math.PI/180;
-      const Δλ = (lon2-lon1) * Math.PI/180;
-
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      return R * c;
-    };
-
     const distance = calculateDistance(
       latitude,
       longitude,

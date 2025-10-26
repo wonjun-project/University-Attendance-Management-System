@@ -2,42 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
 import { hashPassword, authenticateStudent, authenticateProfessor } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase-admin'
-
-type UserRole = 'student' | 'professor'
-
-interface SignupRequest {
-  name: string
-  password: string
-  userType: UserRole
-  studentId?: string
-  professorId?: string
-}
+import { RateLimitPresets } from '@/lib/middleware/rate-limit'
+import { SignupRequestSchema } from '@/lib/schemas/auth'
+import { validateSchema } from '@/lib/utils/validation'
+import { withStandardAPIPerformance } from '@/lib/middleware/performance'
 
 const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7
 
-export async function POST(request: NextRequest) {
+async function signupHandler(request: NextRequest) {
+  // Rate limiting 체크
+  const rateLimitResult = await RateLimitPresets.auth(request)
+  if (rateLimitResult) {
+    return rateLimitResult
+  }
+
   try {
-    const body = (await request.json()) as Partial<SignupRequest>
-    const { name, password, userType } = body
+    const body = await request.json()
 
-    if (!name || !password || !userType) {
-      return NextResponse.json({ error: '모든 필드를 입력해주세요' }, { status: 400 })
+    // Zod 스키마로 런타임 검증
+    const validated = validateSchema(SignupRequestSchema, body)
+    if (validated instanceof NextResponse) {
+      return validated // 검증 실패 응답 반환
     }
 
-    if (password.length < 6) {
-      return NextResponse.json({ error: '비밀번호는 최소 6자 이상이어야 합니다' }, { status: 400 })
-    }
+    const { name, password, userType, studentId, professorId } = validated
 
     const supabase = createServiceClient()
 
     if (userType === 'student') {
-      const studentId = body.studentId
       if (!studentId) {
         return NextResponse.json({ error: '학번을 입력해주세요' }, { status: 400 })
-      }
-
-      if (!/^\d{9}$/.test(studentId)) {
-        return NextResponse.json({ error: '학번은 9자리 숫자여야 합니다. (예: 202012345)' }, { status: 400 })
       }
 
       const { data: existingStudent, error: lookupError } = await supabase
@@ -70,7 +64,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '학생 계정을 생성할 수 없습니다.' }, { status: 500 })
       }
     } else {
-      const professorId = body.professorId
       if (!professorId) {
         return NextResponse.json({ error: '교수번호를 입력해주세요' }, { status: 400 })
       }
@@ -108,8 +101,8 @@ export async function POST(request: NextRequest) {
 
     // 재인증하여 생성된 사용자 정보 확보
     const authUser = userType === 'student'
-      ? await authenticateStudent(body.studentId as string, password)
-      : await authenticateProfessor(body.professorId as string, password)
+      ? await authenticateStudent(studentId as string, password)
+      : await authenticateProfessor(professorId as string, password)
 
     if (!authUser) {
       return NextResponse.json({ error: '생성된 계정을 확인할 수 없습니다.' }, { status: 500 })
@@ -158,6 +151,8 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withStandardAPIPerformance(signupHandler, '/api/auth/signup')
 
 export async function OPTIONS() {
   return NextResponse.json({}, { status: 200 })

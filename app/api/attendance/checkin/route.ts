@@ -3,20 +3,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase-admin'
 import { autoEndSessionIfNeeded } from '@/lib/session/session-service'
+import { evaluateLocation } from '@/lib/utils/geo'
+import { RateLimitPresets } from '@/lib/middleware/rate-limit'
+import { createLogger } from '@/lib/logger'
 import type { SupabaseSessionRow, SupabaseCourseRow } from '@/lib/session/types'
 
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000
-  const φ1 = lat1 * Math.PI / 180
-  const φ2 = lat2 * Math.PI / 180
-  const Δφ = (lat2 - lat1) * Math.PI / 180
-  const Δλ = (lon2 - lon1) * Math.PI / 180
-
-  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
-  return R * c
-}
+const logger = createLogger('attendance-checkin')
 
 interface ResolvedLocation {
   latitude: number
@@ -52,29 +44,6 @@ function resolveClassroomLocation(session: SupabaseSessionRow, course: SupabaseC
   return null
 }
 
-interface LocationEvaluation {
-  distance: number
-  effectiveDistance: number
-  allowedRadius: number
-  isLocationValid: boolean
-}
-
-function evaluateLocation(studentLat: number, studentLon: number, accuracy: number, classroom: ResolvedLocation): LocationEvaluation {
-  const distance = calculateDistance(studentLat, studentLon, classroom.latitude, classroom.longitude)
-  // GPS 정확도에 관계없이 실제 거리만으로 검증 (정확한 거리 기반 검증)
-  // accuracy는 참고용으로만 기록하고, 실제 검증은 distance로만 수행
-  const effectiveDistance = distance
-  const allowedRadius = classroom.radius
-  const isDevelopment = process.env.NODE_ENV === 'development'
-  const isLocationValid = isDevelopment || effectiveDistance <= allowedRadius
-
-  return {
-    distance,
-    effectiveDistance,
-    allowedRadius,
-    isLocationValid
-  }
-}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -91,11 +60,18 @@ interface CheckInRequest {
 
 const MAX_CLOCK_SKEW_MS = 60 * 1000
 
+// Legacy logging function - deprecated, use logger directly
 function logCheckin(event: string, data: Record<string, unknown>) {
-  console.log(JSON.stringify({ scope: 'attendance-checkin', event, ...data }))
+  logger.info(event, data)
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting 체크
+  const rateLimitResult = await RateLimitPresets.checkin(request)
+  if (rateLimitResult) {
+    return rateLimitResult
+  }
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -491,7 +467,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const evaluation = evaluateLocation(latitude, longitude, accuracy, resolvedLocation)
+    const evaluation = evaluateLocation(
+      latitude,
+      longitude,
+      accuracy,
+      resolvedLocation.latitude,
+      resolvedLocation.longitude,
+      resolvedLocation.radius
+    )
 
     if (!Number.isFinite(evaluation.distance)) {
       await supabase

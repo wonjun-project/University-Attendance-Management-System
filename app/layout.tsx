@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Inter, Noto_Sans_KR } from 'next/font/google'
 import { AuthProvider } from '@/lib/auth-context'
+import { WebVitalsReporter } from '@/components/web-vitals-reporter'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -34,6 +35,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full">
       <body className={`${notoSansKR.className} ${inter.variable} ${notoSansKR.variable} h-full bg-gray-50`}>
+        <WebVitalsReporter />
         <AuthProvider>
           <div className="min-h-full">
             {children}

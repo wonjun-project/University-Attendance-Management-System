@@ -1,26 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateStudent, authenticateProfessor } from '@/lib/auth'
 import { SignJWT } from 'jose'
+import { RateLimitPresets } from '@/lib/middleware/rate-limit'
+import { LoginRequestSchema } from '@/lib/schemas/auth'
+import { validateSchema } from '@/lib/utils/validation'
+import { withFastAPIPerformance } from '@/lib/middleware/performance'
 
 const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7
 
-interface LoginRequest {
-  id: string
-  password: string
-  userType: 'student' | 'professor'
-}
+async function loginHandler(request: NextRequest) {
+  // Rate limiting 체크
+  const rateLimitResult = await RateLimitPresets.auth(request)
+  if (rateLimitResult) {
+    return rateLimitResult
+  }
 
-export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as Partial<LoginRequest>
-    const { id, password, userType } = body
+    const body = await request.json()
 
-    if (!id || !password || !userType) {
-      return NextResponse.json(
-        { error: 'ID, 비밀번호, 사용자 타입을 모두 입력해주세요' },
-        { status: 400 }
-      )
+    // Zod 스키마로 런타임 검증
+    const validated = validateSchema(LoginRequestSchema, body)
+    if (validated instanceof NextResponse) {
+      return validated // 검증 실패 응답 반환
     }
+
+    const { id, password, userType } = validated
 
     const authUser = userType === 'student'
       ? await authenticateStudent(id, password)
@@ -75,6 +79,8 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withFastAPIPerformance(loginHandler, '/api/auth/login')
 
 export async function OPTIONS() {
   return NextResponse.json({}, { status: 200 })

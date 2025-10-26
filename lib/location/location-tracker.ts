@@ -1,3 +1,5 @@
+import { calculateDistance, isWithinRadius } from '@/lib/utils/geo'
+
 export interface LocationData {
   latitude: number
   longitude: number
@@ -155,28 +157,17 @@ export class LocationTracker {
     return this.isTracking
   }
 
-  // Calculate distance between two points in meters
+  // Calculate distance between two points in meters (delegated to shared utility)
   static calculateDistance(
     lat1: number,
     lon1: number,
     lat2: number,
     lon2: number
   ): number {
-    const earthRadius = 6371000 // Earth radius in meters
-    const dLat = (lat2 - lat1) * (Math.PI / 180)
-    const dLon = (lon2 - lon1) * (Math.PI / 180)
-    
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    
-    return earthRadius * c
+    return calculateDistance(lat1, lon1, lat2, lon2)
   }
 
-  // Check if current location is within allowed area
+  // Check if current location is within allowed area (delegated to shared utility)
   static isLocationValid(
     currentLat: number,
     currentLon: number,
@@ -184,9 +175,10 @@ export class LocationTracker {
     allowedLon: number,
     allowedRadius: number
   ): boolean {
-    const distance = LocationTracker.calculateDistance(
-      currentLat, currentLon, allowedLat, allowedLon
+    return isWithinRadius(
+      { latitude: currentLat, longitude: currentLon },
+      { latitude: allowedLat, longitude: allowedLon },
+      allowedRadius
     )
-    return distance <= allowedRadius
   }
 }
