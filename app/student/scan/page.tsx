@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { QRCodeScannerNative } from '@/components/qr/QRCodeScannerNative'
 import { QRCodeData } from '@/lib/qr/qr-generator'
+import { GPSKalmanFilter, analyzeFilteringEffect } from '@/lib/utils/gps-filter'
 
 type CheckInResult = {
   success?: boolean
@@ -37,6 +38,7 @@ function ScanPageContent() {
   const hasProcessedSessionRef = useRef(false)
   const correlationIdRef = useRef<string>('')
   const liveRegionRef = useRef<HTMLDivElement | null>(null)
+  const gpsFilterRef = useRef<GPSKalmanFilter | null>(null)
 
   const announce = useCallback((message: string) => {
     setAnnouncement(message)
@@ -51,14 +53,81 @@ function ScanPageContent() {
   }, [])
 
   const acquireLocation = useCallback(async () => {
-    announce('현재 위치를 확인하는 중입니다...')
-    return await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      })
-    })
+    announce('현재 위치를 확인하는 중입니다... (GPS 정밀 측정)')
+
+    // 칼만 필터 초기화 (새로운 체크인마다 리셋)
+    if (!gpsFilterRef.current) {
+      gpsFilterRef.current = new GPSKalmanFilter()
+    }
+    gpsFilterRef.current.reset()
+
+    // 3회 샘플링하여 평균 계산
+    const samples: Array<{ lat: number; lng: number; accuracy: number }> = []
+    const sampleCount = 3
+
+    for (let i = 0; i < sampleCount; i++) {
+      announce(`위치 측정 중... (${i + 1}/${sampleCount})`)
+
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+          })
+        })
+
+        samples.push({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        })
+
+        // 마지막 샘플이 아니면 1초 대기
+        if (i < sampleCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      } catch (error) {
+        console.warn(`GPS 샘플 ${i + 1} 수집 실패:`, error)
+        // 최소 1개 샘플이라도 있으면 계속 진행
+        if (samples.length === 0 && i === sampleCount - 1) {
+          throw error
+        }
+      }
+    }
+
+    if (samples.length === 0) {
+      throw new Error('GPS 위치를 확인할 수 없습니다.')
+    }
+
+    // 평균 계산
+    const avgLat = samples.reduce((sum, s) => sum + s.lat, 0) / samples.length
+    const avgLng = samples.reduce((sum, s) => sum + s.lng, 0) / samples.length
+    const avgAccuracy = samples.reduce((sum, s) => sum + s.accuracy, 0) / samples.length
+
+    // 칼만 필터 적용
+    const filtered = gpsFilterRef.current.filter(avgLat, avgLng, avgAccuracy)
+
+    // 필터링 결과 로그
+    console.log('🔬 [GPS Kalman Filter] 필터링 결과:')
+    console.log(analyzeFilteringEffect(filtered))
+    console.log(`📊 수집된 샘플 수: ${samples.length}`)
+
+    announce('위치 확인 완료! 출석 처리 중...')
+
+    // GeolocationPosition 형식으로 반환 (기존 코드 호환성)
+    return {
+      coords: {
+        latitude: filtered.latitude,
+        longitude: filtered.longitude,
+        accuracy: filtered.accuracy,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null
+      },
+      timestamp: Date.now()
+    } as GeolocationPosition
   }, [announce])
 
   const performCheckIn = useCallback(async (
@@ -92,12 +161,13 @@ function ScanPageContent() {
       console.warn('QR code is missing courseId; skipping auto-enrollment')
     }
 
-    console.log('📍 [Scan Page] 체크인 요청 전송:', {
+    console.log('📍 [Scan Page] 체크인 요청 전송 (칼만 필터 적용):', {
       sessionId: qrData.sessionId,
       sessionIdType: typeof qrData.sessionId,
       latitude,
       longitude,
-      accuracy
+      accuracy,
+      note: '칼만 필터로 정밀 측정된 좌표'
     })
 
     if (!correlationIdRef.current) {

@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
     parsedClientTimestamp = candidate
 
-    console.log('🎯 [CheckIn] 요청 수신:', {
+    console.log('🎯 [CheckIn] 요청 수신 (칼만 필터 적용 좌표):', {
       sessionId,
       sessionIdType: typeof sessionId,
       sessionIdLength: sessionId?.length,
@@ -119,7 +119,8 @@ export async function POST(request: NextRequest) {
       accuracy,
       clientTimestamp,
       timestamp: new Date().toISOString(),
-      correlationId
+      correlationId,
+      note: '클라이언트에서 칼만 필터로 정밀 측정된 GPS 좌표'
     })
 
     if (!sessionId || typeof sessionId !== 'string' || sessionId.length === 0) {

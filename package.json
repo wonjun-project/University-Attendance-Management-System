@@ -23,6 +23,7 @@
     "jose": "^6.1.0",
     "jsonwebtoken": "^9.0.2",
     "jsqr": "^1.4.0",
+    "kalmanjs": "^1.1.0",
     "next": "^14.2.32",
     "playwright": "^1.55.0",
     "qrcode": "^1.5.4",
