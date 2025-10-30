@@ -44,6 +44,7 @@ export interface HeartbeatOptions {
   maxRetries: number; // 최대 재시도 횟수
   retryDelay: number; // 재시도 지연 시간 (밀리초)
   enableHighAccuracy: boolean; // GPS 고정밀도 모드
+  usePDRFusion: boolean; // GPS + PDR 융합 시스템 사용 여부
 }
 
 export type HeartbeatCallback = (data: {
@@ -75,7 +76,8 @@ export class HeartbeatManager {
     backgroundInterval: 60000, // 1분 (백그라운드)
     maxRetries: 3,
     retryDelay: 5000, // 5초
-    enableHighAccuracy: true
+    enableHighAccuracy: true,
+    usePDRFusion: true // GPS + PDR 융합 시스템 기본 활성화
   };
 
   constructor(
@@ -83,6 +85,7 @@ export class HeartbeatManager {
     options?: Partial<HeartbeatOptions>
   ) {
     this.options = { ...this.options, ...options };
+    this.usePDRFusion = this.options.usePDRFusion;
     this.setupVisibilityHandlers();
     this.setupUnloadHandlers();
   }

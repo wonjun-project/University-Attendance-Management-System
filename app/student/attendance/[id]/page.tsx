@@ -129,7 +129,8 @@ export default function AttendancePage() {
         const manager = createHeartbeatManager(handleHeartbeatUpdate, {
           interval: 30000, // 30초 (포그라운드)
           backgroundInterval: 60000, // 1분 (백그라운드)
-          enableHighAccuracy: true
+          enableHighAccuracy: true,
+          usePDRFusion: true // GPS + PDR 융합 시스템 활성화
         })
 
         setHeartbeatManager(manager)
