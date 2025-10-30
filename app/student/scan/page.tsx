@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context'
 import { QRCodeScannerNative } from '@/components/qr/QRCodeScannerNative'
 import { QRCodeData } from '@/lib/qr/qr-generator'
 import { GPSKalmanFilter, analyzeFilteringEffect } from '@/lib/utils/gps-filter'
+import { EnvironmentDetector } from '@/lib/fusion/environment-detector'
 
 type CheckInResult = {
   success?: boolean
@@ -39,6 +40,7 @@ function ScanPageContent() {
   const correlationIdRef = useRef<string>('')
   const liveRegionRef = useRef<HTMLDivElement | null>(null)
   const gpsFilterRef = useRef<GPSKalmanFilter | null>(null)
+  const environmentDetectorRef = useRef<EnvironmentDetector | null>(null)
 
   const announce = useCallback((message: string) => {
     setAnnouncement(message)
@@ -61,6 +63,11 @@ function ScanPageContent() {
     }
     gpsFilterRef.current.reset()
 
+    // 환경 감지기 초기화 (새로운 체크인마다 리셋)
+    if (!environmentDetectorRef.current) {
+      environmentDetectorRef.current = new EnvironmentDetector()
+    }
+
     // 3회 샘플링하여 평균 계산
     const samples: Array<{ lat: number; lng: number; accuracy: number }> = []
     const sampleCount = 3
@@ -75,6 +82,12 @@ function ScanPageContent() {
             timeout: 15000,
             maximumAge: 0
           })
+        })
+
+        // 환경 감지기에 GPS 품질 업데이트
+        environmentDetectorRef.current.updateGPSQuality({
+          accuracy: position.coords.accuracy,
+          timestamp: Date.now()
         })
 
         samples.push({
@@ -108,14 +121,18 @@ function ScanPageContent() {
     // 칼만 필터 적용
     const filtered = gpsFilterRef.current.filter(avgLat, avgLng, avgAccuracy)
 
+    // 감지된 환경 정보
+    const environment = environmentDetectorRef.current.getCurrentEnvironment()
+
     // 필터링 결과 로그
     console.log('🔬 [GPS Kalman Filter] 필터링 결과:')
     console.log(analyzeFilteringEffect(filtered))
     console.log(`📊 수집된 샘플 수: ${samples.length}`)
+    console.log(`🌍 [Environment Detector] 감지된 환경: ${environment}`)
 
     announce('위치 확인 완료! 출석 처리 중...')
 
-    // GeolocationPosition 형식으로 반환 (기존 코드 호환성)
+    // GeolocationPosition 형식으로 반환 (기존 코드 호환성) + environment 정보 추가
     return {
       coords: {
         latitude: filtered.latitude,
@@ -126,17 +143,19 @@ function ScanPageContent() {
         heading: null,
         speed: null
       },
-      timestamp: Date.now()
-    } as GeolocationPosition
+      timestamp: Date.now(),
+      environment // 환경 정보 추가
+    } as GeolocationPosition & { environment: 'outdoor' | 'indoor' | 'unknown' }
   }, [announce])
 
   const performCheckIn = useCallback(async (
     qrData: QRCodeData,
     attemptNumber = 0,
-    cachedCoords?: GeolocationCoordinates
+    cachedData?: { coords: GeolocationCoordinates; environment?: 'outdoor' | 'indoor' | 'unknown' }
   ): Promise<CheckInResult> => {
-    const coords = cachedCoords ?? (await acquireLocation()).coords
-    const { latitude, longitude, accuracy } = coords
+    const locationData = cachedData ?? await acquireLocation()
+    const { latitude, longitude, accuracy } = locationData.coords
+    const environment = locationData.environment ?? 'unknown'
 
     if (qrData.courseId) {
       try {
@@ -161,13 +180,14 @@ function ScanPageContent() {
       console.warn('QR code is missing courseId; skipping auto-enrollment')
     }
 
-    console.log('📍 [Scan Page] 체크인 요청 전송 (칼만 필터 적용):', {
+    console.log('📍 [Scan Page] 체크인 요청 전송 (칼만 필터 + 환경 감지):', {
       sessionId: qrData.sessionId,
       sessionIdType: typeof qrData.sessionId,
       latitude,
       longitude,
       accuracy,
-      note: '칼만 필터로 정밀 측정된 좌표'
+      environment,
+      note: '칼만 필터로 정밀 측정된 좌표 + 실내/실외 감지'
     })
 
     if (!correlationIdRef.current) {
@@ -179,6 +199,7 @@ function ScanPageContent() {
       latitude,
       longitude,
       accuracy,
+      environment,
       attemptNumber,
       correlationId: correlationIdRef.current,
       clientTimestamp: new Date().toISOString()
@@ -214,7 +235,7 @@ function ScanPageContent() {
         const delaySeconds = typeof result.retryAfterSeconds === 'number' ? result.retryAfterSeconds : 3
         announce(`출석 확인에 잠시 시간이 필요합니다. ${delaySeconds}초 후 다시 시도합니다.`)
         await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000))
-        return performCheckIn(qrData, attemptNumber + 1, coords)
+        return performCheckIn(qrData, attemptNumber + 1, { coords: locationData.coords, environment })
       }
 
       throw new Error(result?.error || '출석 체크에 실패했습니다.')

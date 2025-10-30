@@ -1,18 +1,29 @@
 /**
- * Heartbeat Manager - 백그라운드에서도 지속적인 GPS 추적을 위한 클라이언트 측 관리자
+ * Heartbeat Manager - 백그라운드에서도 지속적인 GPS+PDR 융합 추적을 위한 클라이언트 측 관리자
  *
  * 기능:
+ * - GPS + PDR Fusion을 사용한 정확한 위치 추적
  * - Page Visibility API를 사용한 백그라운드/포그라운드 감지
  * - 30초마다 서버에 위치 정보와 heartbeat 전송
  * - 네트워크 끊김 시 자동 재연결
  * - 브라우저 탭이 백그라운드로 가도 추적 지속
+ * - 실내/실외 환경 자동 감지 및 모드 전환
  */
+
+import { GPSPDRFusionManager, type FusedPosition } from '@/lib/fusion/gps-pdr-fusion'
+import { EnvironmentDetector, type EnvironmentType } from '@/lib/fusion/environment-detector'
 
 export interface HeartbeatLocation {
   latitude: number;
   longitude: number;
   accuracy: number;
   timestamp: number;
+  // PDR 융합 정보
+  trackingMode?: 'gps-only' | 'pdr-only' | 'fusion';
+  environment?: 'outdoor' | 'indoor' | 'unknown';
+  confidence?: number;
+  gpsWeight?: number;
+  pdrWeight?: number;
 }
 
 export interface HeartbeatResponse {
@@ -52,6 +63,13 @@ export class HeartbeatManager {
   private retryCount = 0;
   private lastSuccessfulHeartbeat: number | null = null;
 
+  // GPS + PDR Fusion Manager
+  private fusionManager: GPSPDRFusionManager | null = null;
+  private usePDRFusion = true; // PDR 융합 사용 여부
+
+  // Environment Detector
+  private environmentDetector: EnvironmentDetector | null = null;
+
   private options: HeartbeatOptions = {
     interval: 30000, // 30초 (포그라운드)
     backgroundInterval: 60000, // 1분 (백그라운드)
@@ -82,6 +100,39 @@ export class HeartbeatManager {
     this.sessionId = sessionId;
 
     try {
+      // Environment Detector 초기화
+      this.environmentDetector = new EnvironmentDetector();
+
+      // GPS+PDR Fusion Manager 초기화
+      if (this.usePDRFusion) {
+        console.log('🔄 GPS+PDR Fusion Manager 초기화 중...');
+
+        // 초기 GPS 위치 획득
+        const initialGPS = await this.getCurrentLocationGPS();
+
+        // Fusion Manager 생성
+        this.fusionManager = new GPSPDRFusionManager({
+          recalibration: {
+            periodicInterval: this.options.interval, // Heartbeat 주기와 동일 (30초)
+            errorThreshold: 15, // GPS-PDR 오차 15m 초과 시 재보정
+            minGpsAccuracy: 30 // GPS 정확도 30m 이하일 때만 재보정
+          }
+        });
+
+        // Fusion 추적 시작
+        await this.fusionManager.startTracking({
+          lat: initialGPS.latitude,
+          lng: initialGPS.longitude,
+          accuracy: initialGPS.accuracy,
+          timestamp: initialGPS.timestamp
+        });
+
+        console.log('✅ GPS+PDR Fusion 초기화 완료:', {
+          initialPosition: { lat: initialGPS.latitude, lng: initialGPS.longitude },
+          accuracy: initialGPS.accuracy
+        });
+      }
+
       // 초기 heartbeat 전송
       await this.sendHeartbeat();
 
@@ -93,12 +144,20 @@ export class HeartbeatManager {
         attendanceId,
         sessionId,
         interval: this.getCurrentInterval(),
-        highAccuracy: this.options.enableHighAccuracy
+        highAccuracy: this.options.enableHighAccuracy,
+        usePDRFusion: this.usePDRFusion
       });
 
       return true;
     } catch (error) {
       console.error('❌ Heartbeat 시작 실패:', error);
+
+      // Fusion Manager cleanup
+      if (this.fusionManager) {
+        this.fusionManager.stopTracking();
+        this.fusionManager = null;
+      }
+
       this.onHeartbeat({
         success: false,
         error: error instanceof Error ? error.message : 'Heartbeat 시작 실패'
@@ -124,6 +183,16 @@ export class HeartbeatManager {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+
+    // GPS+PDR Fusion Manager 정리
+    if (this.fusionManager) {
+      console.log('🧹 GPS+PDR Fusion Manager 정리');
+      this.fusionManager.stopTracking();
+      this.fusionManager = null;
+    }
+
+    // Environment Detector 정리
+    this.environmentDetector = null;
   }
 
   /**
@@ -248,10 +317,10 @@ export class HeartbeatManager {
     }
 
     try {
-      // GPS 위치 획득
+      // GPS+PDR 융합 위치 획득
       const location = await this.getCurrentLocation();
 
-      // 서버에 heartbeat 전송
+      // 서버에 heartbeat 전송 (PDR 정보 포함)
       const response = await fetch('/api/attendance/heartbeat', {
         method: 'POST',
         headers: {
@@ -265,7 +334,13 @@ export class HeartbeatManager {
           accuracy: location.accuracy,
           timestamp: location.timestamp,
           isBackground: this.isBackground,
-          source: this.isBackground ? 'background' : 'foreground'
+          source: this.isBackground ? 'background' : 'foreground',
+          // PDR 융합 정보
+          trackingMode: location.trackingMode,
+          environment: location.environment,
+          confidence: location.confidence,
+          gpsWeight: location.gpsWeight,
+          pdrWeight: location.pdrWeight
         }),
       });
 
@@ -279,7 +354,10 @@ export class HeartbeatManager {
         console.log(`✅ Heartbeat 성공 [${this.isBackground ? 'BG' : 'FG'}]:`, {
           distance: result.distance,
           locationValid: result.locationValid,
-          sessionEnded: result.sessionEnded
+          sessionEnded: result.sessionEnded,
+          trackingMode: location.trackingMode,
+          environment: location.environment,
+          confidence: location.confidence
         });
 
         // 수업이 종료되었다면 heartbeat 중지
@@ -332,9 +410,9 @@ export class HeartbeatManager {
   }
 
   /**
-   * 현재 GPS 위치 획득
+   * GPS 전용 위치 획득 (Fusion 초기화용)
    */
-  private async getCurrentLocation(): Promise<HeartbeatLocation> {
+  private async getCurrentLocationGPS(): Promise<HeartbeatLocation> {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('이 브라우저는 위치 서비스를 지원하지 않습니다.'));
@@ -343,6 +421,14 @@ export class HeartbeatManager {
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          // Environment Detector에 GPS 품질 업데이트
+          if (this.environmentDetector) {
+            this.environmentDetector.updateGPSQuality({
+              accuracy: position.coords.accuracy,
+              timestamp: Date.now()
+            });
+          }
+
           resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -374,6 +460,66 @@ export class HeartbeatManager {
         }
       );
     });
+  }
+
+  /**
+   * GPS+PDR 융합 위치 획득
+   */
+  private async getCurrentLocation(): Promise<HeartbeatLocation> {
+    // PDR Fusion 사용 시
+    if (this.usePDRFusion && this.fusionManager) {
+      try {
+        const fusedPosition: FusedPosition | null = this.fusionManager.getCurrentPosition();
+
+        if (fusedPosition) {
+          // source를 trackingMode로 변환
+          const trackingMode = this.convertSourceToTrackingMode(fusedPosition.source);
+
+          // Environment Detector로부터 환경 정보 가져오기
+          const environment = this.environmentDetector?.getCurrentEnvironment() ?? 'unknown';
+
+          return {
+            latitude: fusedPosition.lat,
+            longitude: fusedPosition.lng,
+            accuracy: fusedPosition.accuracy ?? 20,
+            timestamp: fusedPosition.timestamp,
+            trackingMode,
+            environment,
+            confidence: fusedPosition.confidence,
+            gpsWeight: fusedPosition.gpsWeight,
+            pdrWeight: fusedPosition.pdrWeight
+          };
+        } else {
+          console.warn('⚠️ Fusion position이 null, GPS fallback 사용');
+        }
+      } catch (error) {
+        console.error('❌ Fusion 위치 획득 실패, GPS fallback 사용:', error);
+      }
+    }
+
+    // Fallback: GPS only
+    const gpsPosition = await this.getCurrentLocationGPS();
+    const environment = this.environmentDetector?.getCurrentEnvironment() ?? 'unknown';
+
+    return {
+      ...gpsPosition,
+      trackingMode: 'gps-only',
+      environment
+    };
+  }
+
+  /**
+   * FusedPosition.source를 HeartbeatLocation.trackingMode로 변환
+   */
+  private convertSourceToTrackingMode(source: 'gps' | 'pdr' | 'fused'): 'gps-only' | 'pdr-only' | 'fusion' {
+    switch (source) {
+      case 'gps':
+        return 'gps-only';
+      case 'pdr':
+        return 'pdr-only';
+      case 'fused':
+        return 'fusion';
+    }
   }
 }
 

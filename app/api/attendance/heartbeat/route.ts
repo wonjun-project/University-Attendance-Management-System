@@ -16,6 +16,12 @@ interface HeartbeatRequest {
   timestamp: number;
   isBackground: boolean;
   source: 'foreground' | 'background' | 'page-hidden';
+  // PDR 융합 메타데이터 (선택적)
+  trackingMode?: 'gps-only' | 'pdr-only' | 'fusion';
+  environment?: 'outdoor' | 'indoor' | 'unknown';
+  confidence?: number;
+  gpsWeight?: number;
+  pdrWeight?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -48,7 +54,13 @@ export async function POST(request: NextRequest) {
       accuracy = 0,
       timestamp,
       isBackground,
-      source
+      source,
+      // PDR 융합 메타데이터
+      trackingMode,
+      environment,
+      confidence,
+      gpsWeight,
+      pdrWeight
     } = body;
 
     // 필수 파라미터 검증
@@ -58,7 +70,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`💓 Heartbeat [${source}]: ${user.name} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
+    // PDR 메타데이터 로깅
+    const pdrInfo = trackingMode
+      ? ` [${trackingMode}${environment ? `, ${environment}` : ''}${confidence !== undefined ? `, conf: ${confidence.toFixed(2)}` : ''}]`
+      : '';
+    console.log(`💓 Heartbeat [${source}]: ${user.name} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})${pdrInfo}`);
 
     // 1. 출석 기록 검증 및 세션 정보 확인
     const { data: attendanceData, error: attendanceError } = await supabase
@@ -152,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     const locationValid = distance <= classroomLocation.radius;
 
-    // 6. 위치 로그 기록
+    // 6. 위치 로그 기록 (PDR 메타데이터 포함)
     const { error: locationLogError } = await supabase
       .from('location_logs')
       .insert({
@@ -161,7 +177,13 @@ export async function POST(request: NextRequest) {
         longitude: longitude,
         accuracy: accuracy,
         timestamp: new Date(timestamp).toISOString(),
-        is_valid: locationValid
+        is_valid: locationValid,
+        // PDR 융합 메타데이터 (선택적)
+        tracking_mode: trackingMode,
+        environment: environment,
+        confidence: confidence,
+        gps_weight: gpsWeight,
+        pdr_weight: pdrWeight
       });
 
     if (locationLogError) {
@@ -236,7 +258,13 @@ export async function POST(request: NextRequest) {
             source,
             isBackground,
             timestamp: new Date().toISOString(),
-            consecutiveViolations: recentLogs.length
+            consecutiveViolations: recentLogs.length,
+            // PDR 융합 메타데이터 (있는 경우)
+            ...(trackingMode && { trackingMode }),
+            ...(environment && { environment }),
+            ...(confidence !== undefined && { confidence }),
+            ...(gpsWeight !== undefined && { gpsWeight }),
+            ...(pdrWeight !== undefined && { pdrWeight })
           }
         });
       }
@@ -262,7 +290,13 @@ export async function POST(request: NextRequest) {
       metadata: {
         source,
         isBackground,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        // PDR 융합 메타데이터 (있는 경우)
+        ...(trackingMode && { trackingMode }),
+        ...(environment && { environment }),
+        ...(confidence !== undefined && { confidence }),
+        ...(gpsWeight !== undefined && { gpsWeight }),
+        ...(pdrWeight !== undefined && { pdrWeight })
       }
     });
 
