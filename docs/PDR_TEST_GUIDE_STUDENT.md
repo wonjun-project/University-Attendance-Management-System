@@ -2,6 +2,7 @@
 
 > 💡 **이 문서는**: GPS-PDR 융합 출석 시스템이 제대로 작동하는지 확인하는 가이드입니다.
 > ⏱️ **소요 시간**: 기본 테스트 10분, 정밀 테스트 30분
+> 🌐 **배포 URL**: https://university-attendance-management-sy.vercel.app
 
 ---
 
@@ -14,55 +15,20 @@
 
 ---
 
-## 🚀 1단계: 시스템 시작하기 (2분)
+## 🚀 1단계: 시스템 접속하기 (2분)
 
-### 1-1. 서버 실행
+### 1-1. 스마트폰에서 사이트 접속
 
-**컴퓨터에서**:
+1. **스마트폰 브라우저** 열기 (Chrome/Safari)
+2. 주소창에 입력: **https://university-attendance-management-sy.vercel.app**
+3. 페이지 로딩 확인 (출석 관리 시스템 홈페이지)
 
-```bash
-# 프로젝트 폴더로 이동
-cd University-Attendance-Management-System
-
-# 개발 서버 실행
-npm run dev
-```
-
-**성공하면 이렇게 나옵니다**:
-```
-✓ Ready in 2.3s
-○ Local:   http://localhost:3001
-```
-
-### 1-2. 스마트폰에서 접속
-
-**방법 A: 같은 Wi-Fi 사용 시** (권장)
-
-1. 컴퓨터의 IP 주소 확인:
-   ```bash
-   # Mac/Linux
-   ifconfig | grep "inet " | grep -v 127.0.0.1
-
-   # Windows
-   ipconfig
-   ```
-
-   예시 결과: `192.168.0.10`
-
-2. 스마트폰에서 브라우저 열기
-3. 주소창에 입력: `http://192.168.0.10:3001`
-
-**방법 B: USB 테더링/핫스팟**
-
-1. 스마트폰 핫스팟 켜기
-2. 컴퓨터를 핫스팟에 연결
-3. 1번 방법과 동일하게 IP 확인 후 접속
-
-### 1-3. 권한 허용
+### 1-2. 권한 허용
 
 스마트폰에서 다음 권한 허용:
 - [ ] **위치 정보** (GPS) - 필수
 - [ ] **모션 센서** (걸음 감지) - 자동 허용 (iOS는 별도 팝업 없음)
+- [ ] **카메라** (QR 스캔용) - 필수
 
 ---
 
@@ -72,8 +38,8 @@ npm run dev
 
 1. 학생 계정으로 로그인:
    ```
-   학번: 2021001
-   비밀번호: password123
+   학번: stu001
+   비밀번호: stu001
    ```
 
 2. 메인 페이지에서 활성 수업 확인
@@ -81,7 +47,7 @@ npm run dev
 ### 2-2. QR 코드 스캔
 
 **준비**: 교수 계정으로 QR 코드 생성 필요
-- 교수 계정: `professor1` / `password123`
+- 교수 계정: `prof001` / `prof001`
 - "수업 시작" 버튼 클릭 → QR 생성
 
 **학생 앱에서**:
@@ -103,11 +69,11 @@ npm run dev
 
 - **iPhone (Safari)**:
   1. 설정 > Safari > 고급 > 웹 인스펙터 켜기
-  2. 컴퓨터에서 Safari > 개발 > [내 iPhone] > 페이지 선택
+  2. Mac Safari > 개발 > [내 iPhone] > 페이지 선택
 
 - **Android (Chrome)**:
-  1. 스마트폰 Chrome에서 `chrome://inspect` 입력
-  2. 또는 컴퓨터 Chrome에서 `chrome://inspect` > 기기 선택
+  1. 스마트폰 Chrome 주소창에 `chrome://inspect` 입력
+  2. 또는 PC Chrome에서 `chrome://inspect` > 기기 선택
 
 **확인할 로그**:
 
@@ -266,7 +232,7 @@ SELECT
 FROM location_logs
 WHERE attendance_id IN (
   SELECT id FROM attendances
-  WHERE student_id = '2021001'  -- 내 학번으로 변경
+  WHERE student_id = 'stu001'  -- 내 학번
   ORDER BY created_at DESC
   LIMIT 1
 )
@@ -415,34 +381,7 @@ print(f"오차율: {error_percent:.1f}%")
 2. 실내로 이동 → GPS 정확도 낮아지면 자동 전환
 3. 걷기 테스트 → PDR 활성화 확인
 
-### 문제 4: 거리가 너무 크게/작게 추정됨
-
-**오차율 > 20%인 경우**
-
-**해결**:
-```typescript
-// lib/config/pdr-config.ts 파일 수정
-
-// 거리가 과대 추정되면 (예: 20m → 28m)
-export const WEINBERG_CONFIG = {
-  K: 0.38,  // 기본 0.43에서 감소
-  // ...
-}
-
-// 거리가 과소 추정되면 (예: 20m → 15m)
-export const WEINBERG_CONFIG = {
-  K: 0.48,  // 기본 0.43에서 증가
-  // ...
-}
-```
-
-**재시작**:
-1. `Ctrl+C`로 서버 중지
-2. `npm run dev`로 재시작
-3. 페이지 새로고침
-4. 재테스트
-
-### 문제 5: Heartbeat가 30초마다 안 나옴
+### 문제 4: Heartbeat가 30초마다 안 나옴
 
 **원인**: 네트워크 문제 또는 API 에러
 
@@ -451,9 +390,9 @@ export const WEINBERG_CONFIG = {
    ```javascript
    ❌ Heartbeat 실패 [시도 1/3]: ...
    ```
-2. 네트워크 연결 확인
-3. 서버 로그 확인 (터미널)
-4. Supabase 연결 확인
+2. 네트워크 연결 확인 (Wi-Fi/모바일 데이터)
+3. 페이지 새로고침
+4. 다시 로그인
 
 ---
 
@@ -590,30 +529,22 @@ K = 0.43
 ### Q4. 콘솔을 어떻게 여나요? (모바일)
 
 **A**:
-- **가장 쉬운 방법**: 컴퓨터 Chrome에서 `chrome://inspect` 접속 → 스마트폰 연결 → 원격 디버깅
+- **가장 쉬운 방법**: PC Chrome에서 `chrome://inspect` 접속 → 스마트폰 연결 → 원격 디버깅
 - **iPhone**: Mac Safari 필요
 - **Android**: USB 디버깅 모드 켜야 함
 
-컴퓨터가 없으면 서버 로그로 대체 가능합니다.
+PC가 없으면 서버 로그로 대체 가능합니다.
 
-### Q5. 오차율이 높으면 어떻게 하나요?
-
-**A**:
-1. 파라미터 조정 (위 "문제 해결" 참고)
-2. 다양한 경로에서 재테스트
-3. 평균 오차율로 평가
-4. 10~15% 정도는 정상 범위입니다
-
-### Q6. tracking_mode가 계속 바뀌어요
+### Q5. tracking_mode가 계속 바뀌어요
 
 **A**: 정상입니다!
 - GPS 정확도에 따라 자동으로 전환됩니다
 - `gps-only` ↔ `fusion` ↔ `pdr-only` 전환은 자연스러운 동작
 
-### Q7. 데이터베이스에 데이터가 안 보여요
+### Q6. 데이터베이스에 데이터가 안 보여요
 
 **A**:
-1. 학번이 맞는지 확인 (SQL의 `student_id` 부분)
+1. 학번이 맞는지 확인 (SQL의 `student_id` 부분: `stu001`)
 2. QR 체크인이 성공했는지 확인
 3. Heartbeat가 실제로 발생했는지 콘솔 확인
 4. Supabase 프로젝트가 맞는지 확인
@@ -624,8 +555,8 @@ K = 0.43
 
 테스트를 모두 완료했다면 체크해주세요!
 
-- [ ] 서버 실행 성공
-- [ ] 스마트폰 접속 성공
+- [ ] 배포 사이트 접속 성공
+- [ ] 스마트폰에서 로그인 성공
 - [ ] QR 스캔 및 체크인 성공
 - [ ] 콘솔에서 PDR 로그 확인
 - [ ] 제자리/걷기 테스트 완료
@@ -645,5 +576,6 @@ PDR 시스템이 정상적으로 작동하고 있습니다.
 - 테스트 결과 양식을 작성해서 제출
 - GitHub Issues에 문제 리포트
 
+**배포 URL**: https://university-attendance-management-sy.vercel.app
 **마지막 업데이트**: 2025-10-30
-**문서 버전**: 1.0
+**문서 버전**: 2.0 (배포 버전)
