@@ -115,7 +115,19 @@ export function evaluateLocation(
   const effectiveDistance = distance
 
   // 개발 환경에서는 항상 통과, 프로덕션에서는 거리 검증
-  const isDevelopment = process.env.NODE_ENV === 'development'
+  // Next.js는 'development' 또는 'production' 값을 사용
+  const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENV === 'development'
+
+  console.log('🔍 [Location Validation]', {
+    distance: Math.round(distance),
+    allowedRadius,
+    accuracy: Math.round(accuracy),
+    isDevelopment,
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_ENV: process.env.NEXT_PUBLIC_ENV,
+    isLocationValid: isDevelopment || effectiveDistance <= allowedRadius
+  })
+
   const isLocationValid = isDevelopment || effectiveDistance <= allowedRadius
 
   return {

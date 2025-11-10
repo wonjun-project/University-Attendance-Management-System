@@ -42,7 +42,7 @@ test.describe('위치 기반 출석 검증 테스트', () => {
     const context = await browser.newContext()
     const page = await context.newPage()
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'prof@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
@@ -50,7 +50,7 @@ test.describe('위치 기반 출석 검증 테스트', () => {
     await page.waitForURL('**/professor/**')
 
     // QR 코드 생성
-    await page.goto('http://localhost:3000/professor/qr')
+    await page.goto('http://localhost:3001/professor/qr')
 
     // 강의실 위치 설정
     await page.fill('input[name="latitude"]', CLASSROOM_LAT.toString())
@@ -80,7 +80,7 @@ test.describe('위치 기반 출석 검증 테스트', () => {
       accuracy: 10
     })
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'student@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
@@ -88,7 +88,7 @@ test.describe('위치 기반 출석 검증 테스트', () => {
     await page.waitForURL('**/student/**')
 
     // QR 스캔 페이지로 이동
-    await page.goto('http://localhost:3000/student/scan')
+    await page.goto('http://localhost:3001/student/scan')
 
     // QR 코드 입력
     await page.fill('input[name="qr-code"]', qrCode)
@@ -110,14 +110,14 @@ test.describe('위치 기반 출석 검증 테스트', () => {
       accuracy: 10
     })
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'student2@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
 
     await page.waitForURL('**/student/**')
 
-    await page.goto('http://localhost:3000/student/scan')
+    await page.goto('http://localhost:3001/student/scan')
     await page.fill('input[name="qr-code"]', qrCode)
     await page.click('button:has-text("출석 체크")')
 
@@ -136,14 +136,14 @@ test.describe('위치 기반 출석 검증 테스트', () => {
       accuracy: 10
     })
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'student3@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
 
     await page.waitForURL('**/student/**')
 
-    await page.goto('http://localhost:3000/student/scan')
+    await page.goto('http://localhost:3001/student/scan')
     await page.fill('input[name="qr-code"]', qrCode)
     await page.click('button:has-text("출석 체크")')
 
@@ -162,14 +162,14 @@ test.describe('위치 기반 출석 검증 테스트', () => {
       accuracy: 10
     })
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'student4@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
 
     await page.waitForURL('**/student/**')
 
-    await page.goto('http://localhost:3000/student/scan')
+    await page.goto('http://localhost:3001/student/scan')
     await page.fill('input[name="qr-code"]', qrCode)
     await page.click('button:has-text("출석 체크")')
 
@@ -190,14 +190,14 @@ test.describe('위치 기반 출석 검증 테스트', () => {
       accuracy: 10
     })
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'student5@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
 
     await page.waitForURL('**/student/**')
 
-    await page.goto('http://localhost:3000/student/scan')
+    await page.goto('http://localhost:3001/student/scan')
     await page.fill('input[name="qr-code"]', qrCode)
     await page.click('button:has-text("출석 체크")')
 
@@ -218,14 +218,14 @@ test.describe('위치 기반 출석 검증 테스트', () => {
       accuracy: 50 // GPS 정확도가 낮음
     })
 
-    await page.goto('http://localhost:3000/auth/login')
+    await page.goto('http://localhost:3001/auth/login')
     await page.fill('input[name="email"]', 'student6@test.com')
     await page.fill('input[name="password"]', 'test123')
     await page.click('button[type="submit"]')
 
     await page.waitForURL('**/student/**')
 
-    await page.goto('http://localhost:3000/student/scan')
+    await page.goto('http://localhost:3001/student/scan')
     await page.fill('input[name="qr-code"]', qrCode)
     await page.click('button:has-text("출석 체크")')
 

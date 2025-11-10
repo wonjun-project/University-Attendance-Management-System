@@ -468,6 +468,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('🔍 [CheckIn] 위치 검증 시작:', {
+      studentLat: latitude,
+      studentLon: longitude,
+      classroomLat: resolvedLocation.latitude,
+      classroomLon: resolvedLocation.longitude,
+      allowedRadius: resolvedLocation.radius,
+      accuracy
+    })
+
     const evaluation = evaluateLocation(
       latitude,
       longitude,
@@ -476,6 +485,13 @@ export async function POST(request: NextRequest) {
       resolvedLocation.longitude,
       resolvedLocation.radius
     )
+
+    console.log('📊 [CheckIn] 위치 검증 결과:', {
+      distance: Math.round(evaluation.distance),
+      effectiveDistance: Math.round(evaluation.effectiveDistance),
+      isLocationValid: evaluation.isLocationValid,
+      allowedRadius: resolvedLocation.radius
+    })
 
     if (!Number.isFinite(evaluation.distance)) {
       await supabase
