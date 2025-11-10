@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createLogger } from '@/lib/logger'
-import * as Sentry from '@sentry/nextjs'
 
 const logger = createLogger('api-performance')
 
@@ -30,11 +29,6 @@ export interface PerformanceConfig {
    * 엔드포인트 이름 (로깅용)
    */
   endpointName?: string
-
-  /**
-   * Sentry에 리포팅 여부
-   */
-  reportToSentry?: boolean
 }
 
 /**
@@ -44,7 +38,6 @@ const DEFAULT_CONFIG: Required<PerformanceConfig> = {
   warningThreshold: 1000, // 1초
   errorThreshold: 3000, // 3초
   endpointName: 'unknown',
-  reportToSentry: true,
 }
 
 /**
@@ -99,16 +92,6 @@ export function withPerformance(
       method,
       url,
     })
-
-    // Sentry breadcrumb 추가
-    if (finalConfig.reportToSentry) {
-      Sentry.addBreadcrumb({
-        category: 'api.request',
-        message: `${method} ${endpointName}`,
-        level: 'info',
-        data: { requestId, method, url },
-      })
-    }
 
     let response: NextResponse
     let error: unknown = null
@@ -169,36 +152,6 @@ export function withPerformance(
         logger.info(logMessage, logMetadata)
       } else {
         logger.debug(logMessage, logMetadata)
-      }
-
-      // Sentry에 리포팅
-      if (finalConfig.reportToSentry) {
-        // 성능 측정값 추가
-        Sentry.setMeasurement(
-          `api.${method.toLowerCase()}.${endpointName}`,
-          durationMs,
-          'millisecond'
-        )
-
-        // 느린 응답 경고
-        if (durationMs >= finalConfig.warningThreshold) {
-          Sentry.addBreadcrumb({
-            category: 'api.performance',
-            message: `Slow API response: ${method} ${endpointName}`,
-            level: durationMs >= finalConfig.errorThreshold ? 'error' : 'warning',
-            data: {
-              requestId,
-              duration: durationMs,
-              threshold: finalConfig.warningThreshold,
-              statusCode,
-            },
-          })
-        }
-
-        // 태그 설정
-        Sentry.setTag('api.method', method)
-        Sentry.setTag('api.endpoint', endpointName)
-        Sentry.setTag('api.status', String(statusCode))
       }
 
       // 응답 헤더에 성능 정보 추가 (디버깅용)
