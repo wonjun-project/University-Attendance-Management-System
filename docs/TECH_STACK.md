@@ -36,26 +36,33 @@
 ### Database
 | 기술 | 용도 |
 |-----|-----|
-| **PostgreSQL** | 메인 데이터베이스 (Supabase) |
-| **Row Level Security** | 데이터 접근 제어 |
+| **PostgreSQL 15+** | 메인 데이터베이스 (Supabase) |
+| **Row Level Security (RLS)** | 데이터 접근 제어 |
 | **Realtime Subscriptions** | 실시간 데이터 동기화 |
 
 ### 위치 추적 & 센서
 | 기술 | 용도 |
 |-----|-----|
-| **Kalman Filter** | GPS 노이즈 필터링 (kalmanjs) |
-| **PDR (Pedestrian Dead Reckoning)** | 실내 위치 추적 |
-| **Haversine Formula** | GPS 거리 계산 |
+| **Kalman Filter (kalmanjs)** | GPS 노이즈 필터링 |
+| **PDR (Pedestrian Dead Reckoning)** | 실내 위치 추적 (자체 구현) |
+| **Haversine Formula** | GPS 거리 계산 (자체 구현) |
 | **GPS-PDR Fusion** | 실내/실외 융합 위치 추적 |
 | **Environment Detector** | 실내/실외 자동 감지 |
+| **Browser Geolocation API** | GPS 좌표 수집 |
+| **DeviceMotion API** | 가속도계, 자이로스코프 |
 
-### DevOps & Monitoring
+### 개발 도구
 | 기술 | 용도 |
 |-----|-----|
-| **Vercel** | 배포 플랫폼 |
-| **Sentry** | 에러 트래킹 & 성능 모니터링 |
-| **Playwright** | E2E 테스트 |
 | **ESLint** | 코드 린팅 |
+| **Playwright** | E2E 테스트 |
+| **TypeScript Compiler** | 타입 체크 |
+
+### 배포
+| 기술 | 용도 |
+|-----|-----|
+| **Vercel** | 호스팅 플랫폼 |
+| **GitHub** | 버전 관리 및 CI/CD |
 
 ---
 
@@ -145,11 +152,11 @@
                               │
 ┌──────────────────────────────────────────────────────────────────┐
 │                      External Services                            │
-│  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐ │
-│  │    Sentry    │       │  Browser     │       │   Vercel     │ │
-│  │  (Error &    │       │  Geolocation │       │  (Hosting)   │ │
-│  │   Perf)      │       │  API         │       │              │ │
-│  └──────────────┘       └──────────────┘       └──────────────┘ │
+│  ┌──────────────┐                         ┌──────────────┐       │
+│  │  Browser     │                         │   Vercel     │       │
+│  │  Geolocation │                         │  (Hosting)   │       │
+│  │  API         │                         │              │       │
+│  └──────────────┘                         └──────────────┘       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -170,11 +177,11 @@
 
 **동작 방식**:
 1. **GPS 우선 모드** (실외)
-   - Kalman Filter로 GPS 노이즈 제거
+   - Kalman Filter (kalmanjs)로 GPS 노이즈 제거
    - 정확도: ±5-10m
 
 2. **PDR 보조 모드** (실내)
-   - 가속도계 + 자이로스코프
+   - 가속도계 + 자이로스코프 (DeviceMotion API)
    - Step Detection + Heading Estimation
    - 정확도: ±2-5m (단거리)
 
@@ -197,14 +204,16 @@
 ```typescript
 // lib/auth.ts
 - HttpOnly Cookie 저장 (XSS 방지)
+- jose 라이브러리 사용
 - 만료 시간: 7일
-- Refresh Token: 구현 예정
+- bcryptjs로 비밀번호 해싱
 ```
 
 #### Rate Limiting
 ```typescript
 // lib/middleware/rate-limit.ts
 - Sliding Window 알고리즘
+- 메모리 기반 (in-memory)
 - 로그인: 5회/분
 - 체크인: 10회/분
 - QR 생성: 20회/시간
@@ -224,13 +233,16 @@
 // lib/realtime/heartbeat-manager.ts
 - 30초마다 위치 전송
 - 2회 연속 이탈 시 자동 조퇴
-- WebSocket 기반 실시간 업데이트
+- 실시간 위치 추적
 ```
 
 #### 성능 모니터링
-- **Web Vitals**: FCP, LCP, CLS, FID
-- **Sentry**: 에러 추적, 성능 모니터링
-- **구조화된 로깅**: JSON 포맷
+```typescript
+// lib/monitoring/web-vitals.ts
+- Web Vitals 측정 (FCP, LCP, CLS, FID, TTFB, INP)
+- 구조화된 JSON 로깅
+- 콘솔 기반 로깅
+```
 
 ---
 
@@ -244,7 +256,7 @@
 GPS 위치 수집 (3회 샘플링)
     │
     ▼
-Kalman Filter 적용
+Kalman Filter 적용 (kalmanjs)
     │
     ▼
 환경 감지 (실내/실외)
@@ -255,14 +267,15 @@ Kalman Filter 적용
     ▼
 거리 검증 (Haversine)
     │
-    ├─ 허용 범위 내 → 출석 성공
-    └─ 허용 범위 외 → 출석 실패
+    ├─ 개발 환경 → 모든 거리 통과
+    ├─ 프로덕션 + 허용 범위 내 → 출석 성공
+    └─ 프로덕션 + 허용 범위 외 → 출석 실패
     │
     ▼
 DB 저장 (출석 기록 + 위치 로그)
     │
     ▼
-실시간 대시보드 업데이트 (WebSocket)
+실시간 대시보드 업데이트 (Supabase Realtime)
 ```
 
 ### QR 코드 생성 플로우
@@ -281,7 +294,7 @@ Rate Limit 체크 (20/hour)
     └─ classroom_location (위도, 경도, 반경)
     │
     ▼
-QR 코드 이미지 생성
+QR 코드 이미지 생성 (qrcode 라이브러리)
     │
     ▼
 클라이언트 반환
@@ -296,20 +309,20 @@ QR 코드 이미지 생성
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Layer 1: Network Security                                   │
-│  - HTTPS Strict Transport Security                          │
+│  - HTTPS Only (Vercel 자동)                                 │
 │  - CORS 설정                                                 │
 └─────────────────────────────────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ Layer 2: Application Security                               │
-│  - Rate Limiting (Sliding Window)                           │
+│  - Rate Limiting (Sliding Window, in-memory)                │
 │  - CSRF Protection (Double Submit Cookie)                   │
-│  - XSS Prevention (Input Sanitization + CSP)                │
+│  - XSS Prevention (Zod 검증 + 입력 새니타이제이션)          │
 └─────────────────────────────────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ Layer 3: Authentication & Authorization                     │
-│  - JWT (HttpOnly Cookie)                                    │
+│  - JWT (HttpOnly Cookie, jose)                              │
 │  - bcrypt Password Hashing                                  │
 │  - Role-based Access Control                                │
 └─────────────────────────────────────────────────────────────┘
@@ -317,8 +330,8 @@ QR 코드 이미지 생성
 ┌─────────────────────────────────────────────────────────────┐
 │ Layer 4: Database Security                                  │
 │  - Row Level Security (RLS)                                 │
-│  - SQL Injection Prevention (Parameterized Queries)         │
-│  - Encrypted Connections                                    │
+│  - SQL Injection Prevention (Supabase Client)               │
+│  - Encrypted Connections (PostgreSQL SSL)                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -326,10 +339,10 @@ QR 코드 이미지 생성
 
 | 위협 | 방어 방법 | 구현 위치 |
 |-----|---------|---------|
-| **XSS** | 입력 새니타이제이션 + CSP 헤더 | `lib/utils/sanitize.ts` |
+| **XSS** | Zod 스키마 검증 + 입력 새니타이제이션 | `lib/schemas/*`, `lib/utils/sanitize.ts` |
 | **CSRF** | Double Submit Cookie | `lib/middleware/csrf.ts` |
 | **SQL Injection** | Supabase Client (자동 파라미터화) | 모든 DB 쿼리 |
-| **Brute Force** | Rate Limiting | `lib/middleware/rate-limit.ts` |
+| **Brute Force** | Rate Limiting (in-memory) | `lib/middleware/rate-limit.ts` |
 | **Session Hijacking** | HttpOnly + Secure Cookie | `lib/auth.ts` |
 | **Unauthorized Access** | RLS + JWT 검증 | Supabase + Middleware |
 
@@ -351,7 +364,7 @@ university-attendance-management/
 │   └── auth/                     # 인증 페이지
 │
 ├── lib/                          # 핵심 비즈니스 로직
-│   ├── auth.ts                   # JWT 인증
+│   ├── auth.ts                   # JWT 인증 (jose)
 │   ├── supabase-admin.ts         # DB 클라이언트
 │   ├── middleware/               # 미들웨어
 │   │   ├── rate-limit.ts         # Rate Limiting
@@ -371,6 +384,10 @@ university-attendance-management/
 │   │   └── location-tracker.ts
 │   ├── realtime/                 # 실시간 통신
 │   │   └── heartbeat-manager.ts
+│   ├── schemas/                  # Zod 스키마
+│   │   ├── auth.ts
+│   │   ├── attendance.ts
+│   │   └── qr.ts
 │   └── session/                  # 세션 관리
 │       └── session-service.ts
 │
@@ -379,9 +396,6 @@ university-attendance-management/
 │   ├── location/                 # 위치 선택
 │   ├── sensors/                  # 센서 모니터
 │   └── ui/                       # UI 컴포넌트
-│
-├── database/                     # 데이터베이스
-│   └── migrations/               # 마이그레이션 스크립트
 │
 ├── tests/                        # 테스트
 │   ├── unit/                     # 단위 테스트
@@ -399,12 +413,12 @@ university-attendance-management/
 
 ## 환경별 설정
 
-### 개발 환경
+### 개발 환경 (NODE_ENV=development)
 - **위치 검증**: 비활성화 (테스트 편의)
 - **Rate Limiting**: 완화된 제한
-- **로깅**: 상세 로그 출력
+- **로깅**: 상세 콘솔 로그
 
-### 프로덕션 환경
+### 프로덕션 환경 (NODE_ENV=production)
 - **위치 검증**: 활성화 (실제 거리 검증)
 - **Rate Limiting**: 엄격한 제한
 - **로깅**: 에러 및 중요 이벤트만
@@ -419,11 +433,11 @@ SUPABASE_SERVICE_ROLE_KEY=eyJxxx...
 # JWT
 JWT_SECRET=your-secret-key
 
-# Sentry
-NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
-
 # 환경
 NODE_ENV=development | production
+
+# 로깅
+LOG_LEVEL=debug | info | warn | error
 ```
 
 ---
@@ -439,7 +453,7 @@ NODE_ENV=development | production
 ### Backend
 - **Database Indexing**: 주요 쿼리 컬럼 인덱싱
 - **Connection Pooling**: Supabase 자동 관리
-- **Caching**: 메모리 기반 Rate Limit 캐시
+- **In-memory Caching**: Rate Limit 캐시
 
 ### Network
 - **HTTP/2**: Vercel 자동 지원
@@ -448,15 +462,11 @@ NODE_ENV=development | production
 
 ---
 
-## 모니터링 & 로깅
-
-### Sentry 통합
-- **에러 추적**: 실시간 에러 캡처
-- **성능 모니터링**: 트랜잭션 추적
-- **Release Tracking**: 버전별 에러 분석
+## 로깅
 
 ### 구조화된 로깅
 ```typescript
+// lib/logger/index.ts
 {
   timestamp: "2025-11-10T02:46:05.734Z",
   level: "info",
@@ -470,6 +480,12 @@ NODE_ENV=development | production
 }
 ```
 
+### 로그 레벨
+- **error**: 에러 발생 시
+- **warn**: 경고 (느린 API, 성능 저하)
+- **info**: 일반 이벤트 (출석 성공, QR 생성)
+- **debug**: 디버깅 정보 (개발 환경)
+
 ---
 
 ## 참고 문서
@@ -478,10 +494,9 @@ NODE_ENV=development | production
 - **[API 문서](./API.md)**: REST API 엔드포인트 명세
 - **[개발 가이드](./DEVELOPMENT.md)**: 로컬 개발 환경 설정
 - **[PDR 가이드](./PDR_TUNING_GUIDE.md)**: PDR 시스템 튜닝
-- **[배포 가이드](./VERCEL_DEPLOYMENT_FIX.md)**: Vercel 배포 설정
 
 ---
 
 **최종 업데이트**: 2025-11-10  
-**버전**: 1.0.0  
+**버전**: 1.1.0  
 **작성자**: AI Code Lab

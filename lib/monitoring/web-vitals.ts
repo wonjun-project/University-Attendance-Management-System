@@ -1,11 +1,10 @@
 /**
  * Web Vitals 성능 모니터링
  *
- * Next.js 내장 Web Vitals를 Sentry와 연동하여
+ * Next.js 내장 Web Vitals를 활용하여
  * 실제 사용자 경험 지표를 수집합니다.
  */
 
-import * as Sentry from '@sentry/nextjs'
 import { createLogger } from '@/lib/logger'
 
 const logger = createLogger('web-vitals')
@@ -51,7 +50,7 @@ function getRating(
  * Web Vitals 리포터
  *
  * Next.js의 reportWebVitals에서 호출되어
- * 성능 메트릭을 Sentry와 로그에 전송합니다.
+ * 성능 메트릭을 로그에 기록합니다.
  *
  * @example
  * ```typescript
@@ -65,20 +64,6 @@ export function reportWebVitals(metric: WebVitalsMetric): void {
   const { id, name, value, delta, navigationType } = metric
   const rating = getRating(name, value)
 
-  // 개발 환경에서는 콘솔에만 출력
-  if (process.env.NODE_ENV === 'development') {
-    logger.debug(`Web Vitals: ${name}`, {
-      value: Math.round(value),
-      rating,
-      delta: Math.round(delta),
-      navigationType,
-    })
-    return
-  }
-
-  // Sentry에 성능 측정값 전송
-  Sentry.setMeasurement(name, value, 'millisecond')
-
   // 'poor' 등급인 경우 경고 로그
   if (rating === 'poor') {
     logger.warn(`Web Vitals 성능 저하: ${name}`, {
@@ -88,18 +73,6 @@ export function reportWebVitals(metric: WebVitalsMetric): void {
       delta: Math.round(delta),
       navigationType,
       threshold: THRESHOLDS[name],
-    })
-
-    // Sentry에 성능 문제 breadcrumb 추가
-    Sentry.addBreadcrumb({
-      category: 'web-vitals',
-      message: `Poor ${name}: ${Math.round(value)}ms`,
-      level: 'warning',
-      data: {
-        value,
-        rating,
-        threshold: THRESHOLDS[name],
-      },
     })
   } else {
     // 정상 범위는 디버그 로그
@@ -111,9 +84,6 @@ export function reportWebVitals(metric: WebVitalsMetric): void {
       navigationType,
     })
   }
-
-  // Sentry에 커스텀 태그 추가 (성능 분석용)
-  Sentry.setTag(`web-vitals.${name.toLowerCase()}`, rating)
 }
 
 /**
@@ -149,14 +119,6 @@ export function measurePageLoad(pageName: string): void {
     domContentLoaded: Math.round(domContentLoaded),
     timeToInteractive: Math.round(timeToInteractive),
   })
-
-  // Sentry에 커스텀 측정값 추가
-  Sentry.setMeasurement('page.load', pageLoadTime, 'millisecond')
-  Sentry.setMeasurement('page.dom-content-loaded', domContentLoaded, 'millisecond')
-  Sentry.setMeasurement('page.time-to-interactive', timeToInteractive, 'millisecond')
-
-  // 페이지별 태그 설정
-  Sentry.setTag('page.name', pageName)
 }
 
 /**
@@ -181,21 +143,11 @@ export function measureInteraction(interactionName: string): () => void {
       duration: Math.round(duration),
     })
 
-    // Sentry에 커스텀 측정값 추가
-    Sentry.setMeasurement(`interaction.${interactionName}`, duration, 'millisecond')
-
     // 느린 인터랙션 경고 (300ms 이상)
     if (duration > 300) {
       logger.warn(`느린 인터랙션: ${interactionName}`, {
         duration: Math.round(duration),
         threshold: 300,
-      })
-
-      Sentry.addBreadcrumb({
-        category: 'interaction',
-        message: `Slow interaction: ${interactionName}`,
-        level: 'warning',
-        data: { duration },
       })
     }
   }
@@ -225,9 +177,6 @@ export function measureAPICall(
       status,
     })
 
-    // Sentry에 커스텀 측정값 추가
-    Sentry.setMeasurement(`api.${method.toLowerCase()}.${endpoint}`, duration, 'millisecond')
-
     // 느린 API 경고 (2초 이상)
     if (duration > 2000) {
       logger.warn(`느린 API 응답: ${method} ${endpoint}`, {
@@ -235,22 +184,12 @@ export function measureAPICall(
         threshold: 2000,
         status,
       })
-
-      Sentry.addBreadcrumb({
-        category: 'api',
-        message: `Slow API: ${method} ${endpoint}`,
-        level: 'warning',
-        data: { duration, status },
-      })
     }
 
     // 에러 상태 추적
     if (status === 'error') {
-      Sentry.addBreadcrumb({
-        category: 'api',
-        message: `API Error: ${method} ${endpoint}`,
-        level: 'error',
-        data: { duration },
+      logger.error(`API 에러: ${method} ${endpoint}`, {
+        duration: Math.round(duration),
       })
     }
   }
