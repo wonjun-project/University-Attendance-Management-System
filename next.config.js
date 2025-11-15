@@ -48,7 +48,7 @@ const nextConfig = {
           // Permissions-Policy: 브라우저 기능 제한
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(self), payment=()',
+            value: 'camera=(self), microphone=(), geolocation=(self), payment=()',
           },
           // Content-Security-Policy: XSS/데이터 인젝션 방지
           {
