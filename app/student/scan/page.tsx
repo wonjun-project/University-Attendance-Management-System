@@ -121,6 +121,13 @@ function ScanPageContent() {
     // 칼만 필터 적용
     const filtered = gpsFilterRef.current.filter(avgLat, avgLng, avgAccuracy)
 
+    // 신뢰도가 낮거나 샘플이 적으면 원본 좌표 사용
+    // (칼만 필터 초기화 문제로 인한 과도한 좌표 이동 방지)
+    const useRawCoordinates = filtered.confidence < 0.5 || samples.length < 5
+    const finalLat = useRawCoordinates ? avgLat : filtered.latitude
+    const finalLng = useRawCoordinates ? avgLng : filtered.longitude
+    const finalAccuracy = useRawCoordinates ? avgAccuracy : filtered.accuracy
+
     // 감지된 환경 정보
     const environment = environmentDetectorRef.current.getCurrentEnvironment()
 
@@ -129,15 +136,16 @@ function ScanPageContent() {
     console.log(analyzeFilteringEffect(filtered))
     console.log(`📊 수집된 샘플 수: ${samples.length}`)
     console.log(`🌍 [Environment Detector] 감지된 환경: ${environment}`)
+    console.log(`🎯 [좌표 선택] ${useRawCoordinates ? '원본 좌표 사용' : '필터링된 좌표 사용'} (신뢰도: ${(filtered.confidence * 100).toFixed(1)}%, 샘플: ${samples.length})`)
 
     announce('위치 확인 완료! 출석 처리 중...')
 
     // GeolocationPosition 형식으로 반환 (기존 코드 호환성) + environment 정보 추가
     return {
       coords: {
-        latitude: filtered.latitude,
-        longitude: filtered.longitude,
-        accuracy: filtered.accuracy,
+        latitude: finalLat,
+        longitude: finalLng,
+        accuracy: finalAccuracy,
         altitude: null,
         altitudeAccuracy: null,
         heading: null,
