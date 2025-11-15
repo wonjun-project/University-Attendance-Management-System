@@ -225,6 +225,26 @@ function ScanPageContent() {
     if (!response.ok) {
       console.error('❌ [Scan Page] 체크인 실패:', result.error, result.code)
 
+      // 위치 검증 실패 시 상세 정보 로깅
+      if (result.code === 'invalid_location') {
+        console.error('📍 [위치 검증 실패 상세]:', {
+          error: result.error,
+          distance: result.distance,
+          allowedRadius: result.allowedRadius,
+          gpsAccuracy: result.gpsAccuracy,
+          debug: result.debug
+        })
+
+        // 개발 모드에서는 좌표 정보를 경고로 표시
+        if (result.debug && process.env.NODE_ENV === 'development') {
+          console.warn('🔍 [디버그] 좌표 정보:', {
+            '학생 위치': `${result.debug.studentLat}, ${result.debug.studentLon}`,
+            '강의실 위치': `${result.debug.classroomLat}, ${result.debug.classroomLon}`,
+            '거리': `${result.distance}m (${(result.distance / 1000).toFixed(2)}km)`
+          })
+        }
+      }
+
       const shouldRetry = attemptNumber === 0 && (
         typeof result?.retryAfterSeconds === 'number' ||
         result?.code === 'session_not_found' ||

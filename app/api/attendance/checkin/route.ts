@@ -469,12 +469,17 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔍 [CheckIn] 위치 검증 시작:', {
-      studentLat: latitude,
-      studentLon: longitude,
-      classroomLat: resolvedLocation.latitude,
-      classroomLon: resolvedLocation.longitude,
-      allowedRadius: resolvedLocation.radius,
-      accuracy
+      student: {
+        latitude: latitude,
+        longitude: longitude,
+        accuracy: accuracy
+      },
+      classroom: {
+        latitude: resolvedLocation.latitude,
+        longitude: resolvedLocation.longitude,
+        radius: resolvedLocation.radius
+      },
+      note: '학생과 강의실의 실제 GPS 좌표'
     })
 
     const evaluation = evaluateLocation(
@@ -488,9 +493,11 @@ export async function POST(request: NextRequest) {
 
     console.log('📊 [CheckIn] 위치 검증 결과:', {
       distance: Math.round(evaluation.distance),
+      distanceInKm: (evaluation.distance / 1000).toFixed(2),
       effectiveDistance: Math.round(evaluation.effectiveDistance),
       isLocationValid: evaluation.isLocationValid,
-      allowedRadius: resolvedLocation.radius
+      allowedRadius: resolvedLocation.radius,
+      passed: evaluation.isLocationValid ? '✅ 통과' : '❌ 실패'
     })
 
     if (!Number.isFinite(evaluation.distance)) {
@@ -546,6 +553,13 @@ export async function POST(request: NextRequest) {
         attemptNumber,
         distance: Math.round(evaluation.distance)
       })
+      console.error('❌ [CheckIn] 위치 검증 실패 상세:', {
+        studentLocation: { latitude, longitude },
+        classroomLocation: { latitude: resolvedLocation.latitude, longitude: resolvedLocation.longitude },
+        calculatedDistance: evaluation.distance,
+        allowedRadius: resolvedLocation.radius,
+        difference: evaluation.distance - resolvedLocation.radius
+      })
       return NextResponse.json({
         error: `위치 검증 실패: 강의실에서 ${Math.round(evaluation.distance)}m 떨어져 있습니다. (허용 반경: ${resolvedLocation.radius}m, GPS 정확도: ${Math.round(accuracy)}m)`,
         code: 'invalid_location',
@@ -553,7 +567,13 @@ export async function POST(request: NextRequest) {
         effectiveDistance: Math.round(evaluation.effectiveDistance),
         allowedRadius: resolvedLocation.radius,
         gpsAccuracy: Math.round(accuracy),
-        retryAfterSeconds: attemptNumber === 0 ? 3 : undefined
+        retryAfterSeconds: attemptNumber === 0 ? 3 : undefined,
+        debug: process.env.NODE_ENV === 'development' ? {
+          studentLat: latitude,
+          studentLon: longitude,
+          classroomLat: resolvedLocation.latitude,
+          classroomLon: resolvedLocation.longitude
+        } : undefined
       }, { status: 400 })
     }
 

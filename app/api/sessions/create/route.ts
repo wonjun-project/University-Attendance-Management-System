@@ -260,7 +260,8 @@ export async function POST(request: NextRequest) {
       requestLocation.radius ?? course.location_radius ?? fallbackRadius,
       course.location_radius ?? fallbackRadius
     )
-    const radius = Math.max(10, Math.min(50, requestedRadius))
+    // 반경 제한: 최소 10m, 최대 500m (GPS 정확도 고려)
+    const radius = Math.max(10, Math.min(500, requestedRadius))
 
     const now = new Date()
     const createdAtIso = now.toISOString()
@@ -288,6 +289,23 @@ export async function POST(request: NextRequest) {
       classroom_longitude: longitude,
       classroom_radius: radius
     }
+
+    console.log('📍 [Session Create] 강의실 위치 설정:', {
+      classroom: {
+        latitude: latitude,
+        longitude: longitude,
+        radius: radius
+      },
+      source: {
+        requestLocation: requestLocation,
+        courseLocation: {
+          latitude: course.location_latitude,
+          longitude: course.location_longitude,
+          radius: course.location_radius
+        },
+        usedFallback: !requestLocation.latitude && !requestLocation.lat && !course.location_latitude
+      }
+    })
 
     const { error: insertError } = await supabase
       .from('class_sessions')
