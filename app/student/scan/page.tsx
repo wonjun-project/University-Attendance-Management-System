@@ -138,20 +138,14 @@ function ScanPageContent() {
     console.log(`🌍 [Environment Detector] 감지된 환경: ${environment}`)
     console.log(`🎯 [좌표 선택] ${useRawCoordinates ? '원본 좌표 사용' : '필터링된 좌표 사용'} (신뢰도: ${(filtered.confidence * 100).toFixed(1)}%, 샘플: ${samples.length})`)
 
-    // GPS 정확도 경고
+    // GPS 정확도 경고 (학술제 시연용: 경고만 표시, 에러는 던지지 않음)
     if (finalAccuracy > 500) {
       console.warn(`⚠️ [GPS Warning] GPS 정확도가 매우 낮습니다 (${Math.round(finalAccuracy)}m)`)
-      console.warn('💡 [GPS Warning] WiFi/IP 기반 위치가 사용되고 있을 가능성이 높습니다')
-      console.warn('💡 [GPS Warning] 실외로 나가서 GPS 신호를 잡아주세요')
-
-      throw new Error(
-        `GPS 정확도가 너무 낮습니다 (${Math.round(finalAccuracy / 1000)}km).\n\n` +
-        `실외로 나가서 GPS 신호를 잡아주세요.\n` +
-        `실내에서는 GPS 신호가 약해 정확한 위치를 확인할 수 없습니다.`
-      )
+      console.warn('💡 [GPS Warning] 실내 환경에서 GPS 정확도가 낮을 수 있습니다')
+      // 학술제 시연용: 에러를 던지지 않고 계속 진행
     } else if (finalAccuracy > 100) {
       console.warn(`⚠️ [GPS Warning] GPS 정확도가 낮습니다 (${Math.round(finalAccuracy)}m)`)
-      console.warn('💡 [GPS Warning] 가능하면 실외 또는 창가로 이동해주세요')
+      console.warn('💡 [GPS Warning] 실내 환경에서 GPS 정확도가 낮을 수 있습니다')
     }
 
     announce('위치 확인 완료! 출석 처리 중...')

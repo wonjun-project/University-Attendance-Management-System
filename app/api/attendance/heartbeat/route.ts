@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
     // GPS 정확도가 너무 낮으면 위치 검증 건너뜀 (실내 GPS 불안정 대응)
     if (accuracy > 100) {
       console.warn(`⚠️ GPS 정확도가 낮아 위치 검증 건너뜀 (정확도: ${Math.round(accuracy)}m)`);
-      console.warn(`💡 실외로 나가서 GPS 신호를 잡아주세요`);
+      console.warn(`💡 실내 환경에서 GPS 정확도가 낮을 수 있습니다`);
 
       // 정확도가 낮은 GPS 데이터는 location_logs에 기록하지 않음
       return NextResponse.json({
