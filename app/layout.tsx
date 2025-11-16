@@ -40,13 +40,15 @@ export default function RootLayout({
         <Script
           src="https://cdn.jsdelivr.net/npm/eruda"
           strategy="afterInteractive"
-          onLoad={() => {
-            if (typeof window !== 'undefined' && (window as any).eruda) {
-              (window as any).eruda.init();
+        />
+        <Script id="eruda-init" strategy="afterInteractive">
+          {`
+            if (typeof window !== 'undefined' && window.eruda) {
+              window.eruda.init();
               console.log('📱 Eruda 모바일 개발자 도구 활성화됨');
             }
-          }}
-        />
+          `}
+        </Script>
         <WebVitalsReporter />
         <AuthProvider>
           <div className="min-h-full">
