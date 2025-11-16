@@ -209,21 +209,50 @@ export async function POST(request: NextRequest) {
     if (!locationValid) {
       console.warn(`⚠️ 위치 이탈 감지: ${user.name} - ${Math.round(distance)}m (허용: ${classroomLocation.radius}m)`);
 
-      // 최근 location_logs 조회하여 연속 이탈 확인 (현재 기록 포함하여 2개 조회)
+      // GPS 정확도가 너무 낮으면 위치 이탈 무시 (실내 GPS 불안정 대응)
+      if (accuracy > 100) {
+        console.warn(`⚠️ GPS 정확도가 낮아 위치 이탈 무시 (정확도: ${Math.round(accuracy)}m)`);
+
+        // 위치 로그는 기록하되, 조퇴 처리는 하지 않음
+        return NextResponse.json({
+          success: true,
+          locationValid: false,
+          lowAccuracy: true,
+          distance: Math.round(distance),
+          accuracy: Math.round(accuracy),
+          allowedRadius: classroomLocation.radius,
+          sessionEnded: false,
+          message: `GPS 정확도가 낮아 위치 검증을 건너뜁니다 (정확도: ${Math.round(accuracy)}m)`,
+          metadata: {
+            source,
+            isBackground,
+            timestamp: new Date().toISOString(),
+            ...(trackingMode && { trackingMode }),
+            ...(environment && { environment }),
+            ...(confidence !== undefined && { confidence })
+          }
+        });
+      }
+
+      // 최근 location_logs 조회하여 연속 이탈 확인 (현재 기록 포함하여 4개 조회)
       const { data: recentLogs, error: logsError } = await supabase
         .from('location_logs')
-        .select('is_valid')
+        .select('is_valid, accuracy')
         .eq('attendance_id', attendanceId)
         .order('created_at', { ascending: false })
-        .limit(2);
+        .limit(4);
 
       if (logsError) {
         console.error('최근 위치 로그 조회 실패:', logsError);
       }
 
-      // 연속 2회 이상 이탈 감지 시 조퇴 처리
-      if (recentLogs && recentLogs.length >= 2 && recentLogs.every(log => !log.is_valid)) {
-        console.warn(`🚪 조퇴 처리 시작: ${user.name} - 연속 ${recentLogs.length}회 범위 이탈 감지`);
+      // 연속 3회 이상 이탈 감지 시 조퇴 처리 (2회 → 3회로 강화)
+      // 단, 정확도가 좋은 GPS 데이터만 카운트
+      const validLogs = recentLogs?.filter(log => (log.accuracy || 0) <= 100) || [];
+      const shouldMarkEarlyLeave = validLogs.length >= 3 && validLogs.every(log => !log.is_valid);
+
+      if (shouldMarkEarlyLeave) {
+        console.warn(`🚪 조퇴 처리 시작: ${user.name} - 연속 ${validLogs.length}회 범위 이탈 감지`);
 
         // attendances 테이블 업데이트: 조퇴 처리
         const { error: updateError } = await supabase
@@ -269,8 +298,9 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 첫 번째 이탈이거나 연속 이탈이 아닌 경우 경고만 전송
-      console.warn(`⚠️ 위치 이탈 경고: ${user.name} - 연속 이탈 ${recentLogs?.length || 0}회`);
+      // 조퇴 처리 조건 미달 - 경고만 전송
+      const validLogCount = validLogs.length;
+      console.warn(`⚠️ 위치 이탈 경고: ${user.name} - 유효 로그 ${validLogCount}회 (조퇴 처리: 3회 필요)`);
     }
 
     // 9. 성공 응답
