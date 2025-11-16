@@ -37,16 +37,19 @@ export default function RootLayout({
     <html lang="ko" className="h-full">
       <body className={`${notoSansKR.className} ${inter.variable} ${notoSansKR.variable} h-full bg-gray-50`}>
         {/* Eruda 모바일 개발자 도구 */}
-        <Script
-          src="https://cdn.jsdelivr.net/npm/eruda"
-          strategy="afterInteractive"
-        />
         <Script id="eruda-init" strategy="afterInteractive">
           {`
-            if (typeof window !== 'undefined' && window.eruda) {
-              window.eruda.init();
-              console.log('📱 Eruda 모바일 개발자 도구 활성화됨');
-            }
+            (function() {
+              const script = document.createElement('script');
+              script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+              script.onload = function() {
+                if (window.eruda) {
+                  window.eruda.init();
+                  console.log('📱 Eruda 모바일 개발자 도구 활성화됨');
+                }
+              };
+              document.head.appendChild(script);
+            })();
           `}
         </Script>
         <WebVitalsReporter />
