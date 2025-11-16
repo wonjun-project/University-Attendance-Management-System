@@ -168,7 +168,34 @@ export async function POST(request: NextRequest) {
 
     const locationValid = distance <= classroomLocation.radius;
 
-    // 6. 위치 로그 기록 (PDR 메타데이터 포함)
+    // 5.5. GPS 정확도 체크 (location_logs 기록 전에 먼저 검증)
+    // GPS 정확도가 너무 낮으면 위치 검증 건너뜀 (실내 GPS 불안정 대응)
+    if (accuracy > 100) {
+      console.warn(`⚠️ GPS 정확도가 낮아 위치 검증 건너뜀 (정확도: ${Math.round(accuracy)}m)`);
+      console.warn(`💡 실외로 나가서 GPS 신호를 잡아주세요`);
+
+      // 정확도가 낮은 GPS 데이터는 location_logs에 기록하지 않음
+      return NextResponse.json({
+        success: true,
+        locationValid: false,
+        lowAccuracy: true,
+        distance: Math.round(distance),
+        accuracy: Math.round(accuracy),
+        allowedRadius: classroomLocation.radius,
+        sessionEnded: false,
+        message: `GPS 정확도가 낮아 위치 검증을 건너뜁니다 (정확도: ${Math.round(accuracy)}m)`,
+        metadata: {
+          source,
+          isBackground,
+          timestamp: new Date().toISOString(),
+          ...(trackingMode && { trackingMode }),
+          ...(environment && { environment }),
+          ...(confidence !== undefined && { confidence })
+        }
+      });
+    }
+
+    // 6. 위치 로그 기록 (PDR 메타데이터 포함) - GPS 정확도가 좋은 경우만
     const { error: locationLogError } = await supabase
       .from('location_logs')
       .insert({
@@ -209,32 +236,8 @@ export async function POST(request: NextRequest) {
     if (!locationValid) {
       console.warn(`⚠️ 위치 이탈 감지: ${user.name} - ${Math.round(distance)}m (허용: ${classroomLocation.radius}m)`);
 
-      // GPS 정확도가 너무 낮으면 위치 이탈 무시 (실내 GPS 불안정 대응)
-      if (accuracy > 100) {
-        console.warn(`⚠️ GPS 정확도가 낮아 위치 이탈 무시 (정확도: ${Math.round(accuracy)}m)`);
-
-        // 위치 로그는 기록하되, 조퇴 처리는 하지 않음
-        return NextResponse.json({
-          success: true,
-          locationValid: false,
-          lowAccuracy: true,
-          distance: Math.round(distance),
-          accuracy: Math.round(accuracy),
-          allowedRadius: classroomLocation.radius,
-          sessionEnded: false,
-          message: `GPS 정확도가 낮아 위치 검증을 건너뜁니다 (정확도: ${Math.round(accuracy)}m)`,
-          metadata: {
-            source,
-            isBackground,
-            timestamp: new Date().toISOString(),
-            ...(trackingMode && { trackingMode }),
-            ...(environment && { environment }),
-            ...(confidence !== undefined && { confidence })
-          }
-        });
-      }
-
       // 최근 location_logs 조회하여 연속 이탈 확인 (현재 기록 포함하여 4개 조회)
+      // 참고: GPS 정확도가 낮은 경우는 이미 위에서 early return 되어 여기까지 오지 않음
       const { data: recentLogs, error: logsError } = await supabase
         .from('location_logs')
         .select('is_valid, accuracy')
