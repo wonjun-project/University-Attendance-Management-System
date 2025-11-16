@@ -36,6 +36,8 @@ export interface HeartbeatResponse {
   newStatus?: 'present' | 'late' | 'left_early' | 'absent';
   message?: string;
   error?: string;
+  lowAccuracy?: boolean;
+  accuracy?: number;
 }
 
 export interface HeartbeatOptions {
