@@ -482,6 +482,32 @@ export async function POST(request: NextRequest) {
       note: '학생과 강의실의 실제 GPS 좌표'
     })
 
+    // GPS 정확도 검증 (창가 자리 필수)
+    if (accuracy > 100) {
+      console.warn(`⚠️ GPS 정확도가 낮음: ${Math.round(accuracy)}m`)
+      await supabase
+        .from('attendance_attempts')
+        .insert({
+          session_id: sessionId,
+          student_id: user.userId,
+          attempt_number: attemptNumber,
+          client_timestamp: parsedClientTimestamp.toISOString(),
+          clock_skew_seconds: clockSkewSeconds,
+          result: 'error',
+          failure_reason: 'low_gps_accuracy',
+          correlation_id: correlationId,
+          device_lat: Number.isFinite(latitude) ? Number(latitude.toFixed(2)) : null,
+          device_lng: Number.isFinite(longitude) ? Number(longitude.toFixed(2)) : null,
+          device_accuracy: Number.isFinite(accuracy) ? accuracy : null
+        })
+      return NextResponse.json({
+        error: 'GPS 신호가 약합니다. 창가 자리로 이동하여 GPS 신호를 잡아주세요.',
+        code: 'low_gps_accuracy',
+        accuracy: Math.round(accuracy),
+        message: '창가 또는 실외에서 30초~1분 대기 후 다시 시도하세요'
+      }, { status: 400 })
+    }
+
     const evaluation = evaluateLocation(
       latitude,
       longitude,
