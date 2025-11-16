@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { Inter, Noto_Sans_KR } from 'next/font/google'
+import Script from 'next/script'
 import { AuthProvider } from '@/lib/auth-context'
 import { WebVitalsReporter } from '@/components/web-vitals-reporter'
 
@@ -35,6 +36,17 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full">
       <body className={`${notoSansKR.className} ${inter.variable} ${notoSansKR.variable} h-full bg-gray-50`}>
+        {/* Eruda 모바일 개발자 도구 */}
+        <Script
+          src="https://cdn.jsdelivr.net/npm/eruda"
+          strategy="afterInteractive"
+          onLoad={() => {
+            if (typeof window !== 'undefined' && (window as any).eruda) {
+              (window as any).eruda.init();
+              console.log('📱 Eruda 모바일 개발자 도구 활성화됨');
+            }
+          }}
+        />
         <WebVitalsReporter />
         <AuthProvider>
           <div className="min-h-full">
