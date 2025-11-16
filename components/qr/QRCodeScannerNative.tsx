@@ -87,9 +87,37 @@ export function QRCodeScannerNative({ onScanSuccess, onScanError, onClose }: QRC
       try {
         console.log('🔍 [QR Scanner] QR 데이터 분석:', {
           raw: raw.substring(0, 100),
+          length: raw.length,
           startsWithHttp: raw.startsWith('http'),
           isJson: raw.startsWith('{')
         })
+
+        // 데이터 완전성 검증
+        if (!raw || raw.length < 10) {
+          console.warn('⚠️ [QR Scanner] QR 데이터가 너무 짧음 - 무시')
+          handlingRef.current = false
+          return
+        }
+
+        // JSON 형식인 경우 기본 구조 검증
+        if (raw.startsWith('{')) {
+          // JSON이 완전한지 검증 (시작/끝 괄호 일치)
+          const openBraces = (raw.match(/{/g) || []).length
+          const closeBraces = (raw.match(/}/g) || []).length
+
+          if (openBraces !== closeBraces) {
+            console.warn('⚠️ [QR Scanner] 불완전한 JSON (괄호 불일치) - 무시')
+            handlingRef.current = false
+            return
+          }
+
+          // 필수 필드가 포함되어 있는지 확인
+          if (!raw.includes('sessionId') || !raw.includes('courseId')) {
+            console.warn('⚠️ [QR Scanner] 필수 필드 누락 - 무시')
+            handlingRef.current = false
+            return
+          }
+        }
 
         // 1) 우선 JSON 기반 포맷 시도
         let parsed = QRCodeGenerator.parseQRData(raw)
