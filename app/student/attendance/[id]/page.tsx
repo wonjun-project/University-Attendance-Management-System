@@ -88,17 +88,24 @@ export default function AttendancePage() {
       }
 
       // 추적 상태 업데이트
-      setTrackingStatus(data.response.locationValid ? 'in_range' : 'out_of_range')
-
-      // 메시지 표시
-      if (data.response.locationValid) {
-        const distance = data.response.distance ? `${data.response.distance}m` : '범위 내'
-        setLocationError(`✅ 강의실 범위 내 (거리: ${distance})`)
-        setTimeout(() => setLocationError(''), 3000)
+      // GPS 정확도가 낮을 때는 위치 검증을 건너뜀 (학술제 시연용)
+      if (data.response.lowAccuracy) {
+        setTrackingStatus('checking')
+        setLocationError(`📡 GPS 정확도가 낮아 위치 추적이 제한적입니다 (정확도: ${data.response.accuracy}m)`)
+        setTimeout(() => setLocationError(''), 5000)
       } else {
-        const distance = data.response.distance ? `${data.response.distance}m` : '범위 외'
-        const radius = data.response.allowedRadius ? `${data.response.allowedRadius}m` : '설정된 범위'
-        setLocationError(`⚠️ 강의실 범위를 벗어났습니다! (현재: ${distance}, 허용: ${radius})`)
+        setTrackingStatus(data.response.locationValid ? 'in_range' : 'out_of_range')
+
+        // 메시지 표시
+        if (data.response.locationValid) {
+          const distance = data.response.distance ? `${data.response.distance}m` : '범위 내'
+          setLocationError(`✅ 강의실 범위 내 (거리: ${distance})`)
+          setTimeout(() => setLocationError(''), 3000)
+        } else {
+          const distance = data.response.distance ? `${data.response.distance}m` : '범위 외'
+          const radius = data.response.allowedRadius ? `${data.response.allowedRadius}m` : '설정된 범위'
+          setLocationError(`⚠️ 강의실 범위를 벗어났습니다! (현재: ${distance}, 허용: ${radius})`)
+        }
       }
 
       // 세션 종료 감지
