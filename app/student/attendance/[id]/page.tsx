@@ -203,23 +203,21 @@ export default function AttendancePage() {
       console.error('데이터 가져오기 실패:', error)
       setLocationError(error instanceof Error ? error.message : '정보를 가져올 수 없습니다.')
     }
-  }, [sessionId, startHeartbeatTracking, stopHeartbeatTracking])
+  }, [sessionId])  // startHeartbeatTracking, stopHeartbeatTracking 제거
 
   useEffect(() => {
     if (sessionId) {
       fetchSessionData()
     }
 
+    // Cleanup: Heartbeat 중지
     return () => {
-      stopHeartbeatTracking()
+      if (heartbeatManager) {
+        console.log('💓 페이지 언마운트 시 Heartbeat 중지')
+        heartbeatManager.stopHeartbeat()
+      }
     }
-  }, [sessionId, fetchSessionData, stopHeartbeatTracking])
-
-  useEffect(() => {
-    return () => {
-      stopHeartbeatTracking()
-    }
-  }, [stopHeartbeatTracking])
+  }, [sessionId])  // fetchSessionData, stopHeartbeatTracking 제거
 
   if (loading) {
     return <div className="min-h-screen bg-gray-50" />
