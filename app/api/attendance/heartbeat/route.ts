@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
             source,
             isBackground,
             timestamp: new Date().toISOString(),
-            consecutiveViolations: recentLogs.length,
+            consecutiveViolations: validLogs.length,
             // PDR 융합 메타데이터 (있는 경우)
             ...(trackingMode && { trackingMode }),
             ...(environment && { environment }),
