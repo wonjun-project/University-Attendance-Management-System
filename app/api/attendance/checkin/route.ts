@@ -482,8 +482,8 @@ export async function POST(request: NextRequest) {
       note: '학생과 강의실의 실제 GPS 좌표'
     })
 
-    // GPS 정확도 검증 (창가 자리 필수)
-    if (accuracy > 100) {
+    // GPS 정확도 검증 (학술제 시연용: 2000m까지 허용)
+    if (accuracy > 2000) {
       console.warn(`⚠️ GPS 정확도가 낮음: ${Math.round(accuracy)}m`)
       await supabase
         .from('attendance_attempts')
