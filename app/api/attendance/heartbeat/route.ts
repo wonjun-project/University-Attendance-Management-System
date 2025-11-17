@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { autoEndSessionIfNeeded } from '@/lib/session/session-service'
 import { calculateDistance } from '@/lib/utils/geo'
+import type { SupabaseSessionRow, SupabaseCourseRow } from '@/lib/session/types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,49 @@ interface HeartbeatRequest {
   confidence?: number;
   gpsWeight?: number;
   pdrWeight?: number;
+}
+
+interface ResolvedLocation {
+  latitude: number
+  longitude: number
+  radius: number
+  displayName?: string
+}
+
+// Heartbeat API에서 사용할 최소 필드만 요구하는 타입
+type SessionLocationData = Pick<SupabaseSessionRow, 'classroom_latitude' | 'classroom_longitude' | 'classroom_radius'>;
+type CourseLocationData = Pick<SupabaseCourseRow, 'location_latitude' | 'location_longitude' | 'location_radius' | 'location'>;
+
+function resolveClassroomLocation(
+  session: SessionLocationData,
+  course: CourseLocationData | CourseLocationData[] | null
+): ResolvedLocation | null {
+  // 1순위: 세션별 강의실 위치 (QR 생성 시 설정)
+  if (session.classroom_latitude !== null && session.classroom_longitude !== null) {
+    return {
+      latitude: Number(session.classroom_latitude),
+      longitude: Number(session.classroom_longitude),
+      radius: session.classroom_radius ?? 100,
+      displayName: undefined
+    }
+  }
+
+  // 2순위: 강의 고정 위치
+  const courseRecord = Array.isArray(course) ? course[0] ?? null : course
+  if (!courseRecord) {
+    return null
+  }
+
+  if (courseRecord.location_latitude !== null && courseRecord.location_longitude !== null) {
+    return {
+      latitude: Number(courseRecord.location_latitude),
+      longitude: Number(courseRecord.location_longitude),
+      radius: courseRecord.location_radius ?? 100,
+      displayName: courseRecord.location ?? undefined
+    }
+  }
+
+  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -89,8 +133,14 @@ export async function POST(request: NextRequest) {
           updated_at,
           status,
           course_id,
+          classroom_latitude,
+          classroom_longitude,
+          classroom_radius,
           courses!course_id (
-            classroom_location
+            location_latitude,
+            location_longitude,
+            location_radius,
+            location
           )
         )
       `)
@@ -148,25 +198,48 @@ export async function POST(request: NextRequest) {
 
     // 4. 강의실 위치 정보 추출
     const course = Array.isArray(normalizedSession.courses) ? normalizedSession.courses[0] : normalizedSession.courses;
-    const classroomLocation = course?.classroom_location as {
-      latitude: number;
-      longitude: number;
-      radius: number;
-    };
+    const resolvedLocation = resolveClassroomLocation(normalizedSession, course);
 
-    if (!classroomLocation) {
+    if (!resolvedLocation) {
+      console.error('❌ 강의실 위치 정보가 설정되지 않음');
       return NextResponse.json({ error: 'Classroom location not configured' }, { status: 500 });
     }
+
+    // 위치 정보 검증
+    if (!Number.isFinite(resolvedLocation.latitude) ||
+        !Number.isFinite(resolvedLocation.longitude) ||
+        !Number.isFinite(resolvedLocation.radius)) {
+      console.error('❌ 강의실 위치 정보가 올바르지 않음:', resolvedLocation);
+      return NextResponse.json({ error: 'Invalid classroom location data' }, { status: 500 });
+    }
+
+    console.log('📍 강의실 위치 정보:', {
+      latitude: resolvedLocation.latitude,
+      longitude: resolvedLocation.longitude,
+      radius: resolvedLocation.radius
+    });
+    console.log('📍 학생 위치:', { latitude, longitude, accuracy });
 
     // 5. 거리 계산 (Haversine 공식)
     const distance = calculateDistance(
       latitude,
       longitude,
-      classroomLocation.latitude,
-      classroomLocation.longitude
+      resolvedLocation.latitude,
+      resolvedLocation.longitude
     );
 
-    const locationValid = distance <= classroomLocation.radius;
+    console.log('📏 계산된 거리:', distance, 'm');
+
+    // 거리 검증
+    if (!Number.isFinite(distance)) {
+      console.error('❌ 거리 계산 실패 (NaN):', { latitude, longitude, resolvedLocation });
+      return NextResponse.json({
+        error: 'Failed to calculate distance',
+        details: 'Invalid coordinates'
+      }, { status: 500 });
+    }
+
+    const locationValid = distance <= resolvedLocation.radius;
 
     // 5.5. GPS 정확도 체크 (location_logs 기록 전에 먼저 검증)
     // GPS 정확도가 너무 낮으면 위치 검증 건너뜀 (실내 GPS 불안정 대응)
@@ -181,7 +254,7 @@ export async function POST(request: NextRequest) {
         lowAccuracy: true,
         distance: Math.round(distance),
         accuracy: Math.round(accuracy),
-        allowedRadius: classroomLocation.radius,
+        allowedRadius: resolvedLocation.radius,
         sessionEnded: false,
         message: `GPS 정확도가 낮아 위치 검증을 건너뜁니다 (정확도: ${Math.round(accuracy)}m)`,
         metadata: {
@@ -234,7 +307,7 @@ export async function POST(request: NextRequest) {
 
     // 8. 위치 이탈 시 처리
     if (!locationValid) {
-      console.warn(`⚠️ 위치 이탈 감지: ${user.name} - ${Math.round(distance)}m (허용: ${classroomLocation.radius}m)`);
+      console.warn(`⚠️ 위치 이탈 감지: ${user.name} - ${Math.round(distance)}m (허용: ${resolvedLocation.radius}m)`);
 
       // 최근 location_logs 조회하여 연속 이탈 확인 (현재 기록 포함하여 4개 조회)
       // 참고: GPS 정확도가 낮은 경우는 이미 위에서 early return 되어 여기까지 오지 않음
@@ -283,7 +356,7 @@ export async function POST(request: NextRequest) {
           statusChanged: true,
           newStatus: 'left_early',
           distance: Math.round(distance),
-          allowedRadius: classroomLocation.radius,
+          allowedRadius: resolvedLocation.radius,
           sessionEnded: false,
           message: `강의실 범위를 ${Math.round(distance)}m 벗어나 조퇴 처리되었습니다.`,
           metadata: {
@@ -309,7 +382,7 @@ export async function POST(request: NextRequest) {
     // 9. 성공 응답
     const responseMessage = locationValid
       ? `위치 추적 성공 - 강의실 범위 내 (거리: ${Math.round(distance)}m)`
-      : `⚠️ 강의실 범위 이탈 - 거리: ${Math.round(distance)}m (허용: ${classroomLocation.radius}m)`;
+      : `⚠️ 강의실 범위 이탈 - 거리: ${Math.round(distance)}m (허용: ${resolvedLocation.radius}m)`;
 
     console.log(`✅ Heartbeat 처리 완료: ${responseMessage}`);
 
@@ -317,7 +390,7 @@ export async function POST(request: NextRequest) {
       success: true,
       locationValid: locationValid,
       distance: Math.round(distance),
-      allowedRadius: classroomLocation.radius,
+      allowedRadius: resolvedLocation.radius,
       sessionEnded: false,
       message: responseMessage,
       metadata: {
