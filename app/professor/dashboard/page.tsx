@@ -252,14 +252,14 @@ export default function ProfessorDashboardPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-900">
-              진행중인 수업 ({dashboardData?.activeSessions?.length || 0})
+              진행중인 수업 ({dashboardData?.activeSessions?.filter(s => s.attendance.students.length > 0).length || 0} / {dashboardData?.activeSessions?.length || 0})
             </h2>
             <Button size="sm" onClick={() => window.location.reload()}>
               새로고침
             </Button>
           </div>
 
-          {dashboardData?.activeSessions?.length === 0 ? (
+          {dashboardData?.activeSessions?.filter(s => s.attendance.students.length > 0).length === 0 ? (
             <Card>
               <CardContent className="p-12">
                 <div className="text-center text-gray-500">
@@ -276,7 +276,7 @@ export default function ProfessorDashboardPage() {
             </Card>
           ) : (
             <div className="grid gap-6">
-              {dashboardData?.activeSessions?.map((session) => (
+              {dashboardData?.activeSessions?.filter(session => session.attendance.students.length > 0).map((session) => (
                 <Card key={session.id}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
