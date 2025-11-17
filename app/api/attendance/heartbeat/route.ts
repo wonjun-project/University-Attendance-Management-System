@@ -322,10 +322,10 @@ export async function POST(request: NextRequest) {
         console.error('최근 위치 로그 조회 실패:', logsError);
       }
 
-      // 연속 3회 이상 이탈 감지 시 조퇴 처리 (2회 → 3회로 강화)
+      // 연속 2회 이상 이탈 감지 시 조퇴 처리 (학술제 시연용: 빠른 반응)
       // 단, 정확도가 좋은 GPS 데이터만 카운트
       const validLogs = recentLogs?.filter(log => (log.accuracy || 0) <= 100) || [];
-      const shouldMarkEarlyLeave = validLogs.length >= 3 && validLogs.every(log => !log.is_valid);
+      const shouldMarkEarlyLeave = validLogs.length >= 2 && validLogs.every(log => !log.is_valid);
 
       if (shouldMarkEarlyLeave) {
         console.warn(`🚪 조퇴 처리 시작: ${user.name} - 연속 ${validLogs.length}회 범위 이탈 감지`);
@@ -376,7 +376,7 @@ export async function POST(request: NextRequest) {
 
       // 조퇴 처리 조건 미달 - 경고만 전송
       const validLogCount = validLogs.length;
-      console.warn(`⚠️ 위치 이탈 경고: ${user.name} - 유효 로그 ${validLogCount}회 (조퇴 처리: 3회 필요)`);
+      console.warn(`⚠️ 위치 이탈 경고: ${user.name} - 유효 로그 ${validLogCount}회 (조퇴 처리: 2회 필요)`);
     }
 
     // 9. 성공 응답
