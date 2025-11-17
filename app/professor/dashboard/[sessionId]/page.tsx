@@ -82,8 +82,8 @@ export default function AttendanceDashboard() {
 
     fetchAttendanceStatus()
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchAttendanceStatus, 30000)
+    // Auto-refresh every 5 seconds (학술제 시연용: 실시간성 향상)
+    const interval = setInterval(fetchAttendanceStatus, 5000)
     return () => clearInterval(interval)
   }, [sessionId, loading, user])
 
