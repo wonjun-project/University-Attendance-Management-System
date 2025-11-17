@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient } from '@/lib/supabase-server'
+import { createServiceClient } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServiceClient()
 
     // JWT 기반 인증 확인
     const session = await getCurrentUser()
@@ -39,6 +39,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Session not found or access denied' }, { status: 404 })
     }
 
+    console.log('🔍 [Status API] Session data:', {
+      sessionId: typedSession.id,
+      courseId: typedSession.course_id,
+      coursesJoin: typedSession.courses,
+      coursesIdFromJoin: typedSession.courses?.id
+    })
+
     // 출석 데이터 + 학생 정보
     const { data: attendanceData } = await supabase
       .from('attendances')
@@ -52,7 +59,7 @@ export async function GET(request: NextRequest) {
     const { count: enrolledCount } = await supabase
       .from('course_enrollments')
       .select('*', { count: 'exact', head: true })
-      .eq('course_id', typedSession.courses?.id || '')
+      .eq('course_id', typedSession.course_id)
 
     const totalStudents = enrolledCount || 0
     const presentStudents = attendances.filter(a => a.status === 'present').length
