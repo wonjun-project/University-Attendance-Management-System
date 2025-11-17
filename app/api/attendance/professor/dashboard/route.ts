@@ -8,27 +8,50 @@ import { createClient } from '@/lib/supabase-server'
 
 export async function GET() {
   try {
+    console.log('🎯 [Professor Dashboard] API 호출됨')
+
     const user = await getCurrentUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    if (user.userType !== 'professor') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!user) {
+      console.log('❌ [Professor Dashboard] 인증 실패: user 없음')
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.userType !== 'professor') {
+      console.log('❌ [Professor Dashboard] 권한 없음: userType =', user.userType)
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    console.log('✅ [Professor Dashboard] 인증 성공:', { userId: user.userId, name: user.name })
 
     const supabase = createClient()
 
     // 교수의 강의 목록
+    console.log('📚 [Professor Dashboard] 강의 목록 조회 시작...', { professorId: user.userId })
+
     const { data: coursesData, error: coursesError } = await supabase
       .from('courses')
       .select('id,name,course_code')
       .eq('professor_id', user.userId)
       .order('created_at', { ascending: false })
 
-    if (coursesError) throw coursesError
+    if (coursesError) {
+      console.error('❌ [Professor Dashboard] 강의 조회 에러:', coursesError)
+      throw coursesError
+    }
 
     const courses: any[] = Array.isArray(coursesData) ? coursesData : []
     const courseIds = courses.map(course => course.id)
 
+    console.log('📚 [Professor Dashboard] 강의 목록:', {
+      count: courses.length,
+      courseIds,
+      courses: courses.map(c => ({ id: c.id, name: c.name }))
+    })
+
     // 활성 세션 정보
     let activeSessions: any[] = []
     if (courseIds.length > 0) {
+      console.log('🔍 [Professor Dashboard] 활성 세션 조회 시작...', { courseIds })
+
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('class_sessions')
         .select('id, date, status, course_id, courses!inner(id,name,course_code)')
@@ -36,26 +59,47 @@ export async function GET() {
         .in('course_id', courseIds)
         .order('date', { ascending: false })
 
-      if (sessionsError) throw sessionsError
+      if (sessionsError) {
+        console.error('❌ [Professor Dashboard] 세션 조회 에러:', sessionsError)
+        throw sessionsError
+      }
 
       const sessions: any[] = Array.isArray(sessionsData) ? sessionsData : []
       const sessionIds = sessions.map(session => session.id)
 
-      const { data: attendanceData } = sessionIds.length
+      console.log('📋 [Professor Dashboard] 활성 세션 목록:', {
+        count: sessions.length,
+        sessionIds,
+        sessions: sessions.map(s => ({ id: s.id, status: s.status, courseName: s.courses?.name }))
+      })
+
+      const { data: attendanceData, error: attendanceError } = sessionIds.length
         ? await supabase
             .from('attendances')
-            .select('id, session_id, student_id, status, check_in_time, location_verified, users:users ( name, student_id )')
+            .select('id, session_id, student_id, status, check_in_time, location_verified, students ( name, student_id )')
             .in('session_id', sessionIds)
-        : { data: [] }
+        : { data: [], error: null }
+
+      if (attendanceError) {
+        console.error('❌ [Professor Dashboard] Attendance 조회 에러:', attendanceError)
+      }
 
       const attendanceList: any[] = Array.isArray(attendanceData) ? attendanceData : []
+
+      console.log('📊 [Professor Dashboard] 출석 데이터 조회 결과:', {
+        sessionIdsCount: sessionIds.length,
+        attendanceCount: attendanceList.length,
+        sampleData: attendanceList.slice(0, 2),
+        error: attendanceError?.message
+      })
 
       activeSessions = sessions.map((session: any) => {
         const list = attendanceList.filter(item => item.session_id === session.id)
         const total = list.length
         const present = list.filter(item => item.status === 'present').length
         const late = list.filter(item => item.status === 'late').length
-        const absent = Math.max(0, total - present - late)
+        const leftEarly = list.filter(item => item.status === 'left_early').length
+        const absent = Math.max(0, total - present - late - leftEarly)
 
         return {
           id: session.id,
@@ -68,10 +112,11 @@ export async function GET() {
             total,
             present,
             late,
+            leftEarly,
             absent,
             students: list.map(item => ({
               studentId: item.student_id,
-              name: item.users?.name ?? item.student_id,
+              name: item.students?.name ?? item.student_id,
               status: item.status,
               checkInTime: item.check_in_time,
               locationVerified: Boolean(item.location_verified),

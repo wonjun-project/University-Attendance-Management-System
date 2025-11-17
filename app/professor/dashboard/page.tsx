@@ -17,6 +17,7 @@ interface SessionAttendance {
   total: number
   present: number
   late: number
+  leftEarly: number
   absent: number
   students: AttendanceStudent[]
 }
@@ -47,10 +48,12 @@ export default function ProfessorDashboardPage() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!user || user.role !== 'professor' || loading) {
+        console.log('⏸️ [Professor Dashboard] API 호출 건너뜀:', { user: !!user, role: user?.role, loading })
         return
       }
 
       try {
+        console.log('📡 [Professor Dashboard] API 호출 시작...')
         setIsLoading(true)
         const response = await fetch('/api/attendance/professor/dashboard', {
           method: 'GET',
@@ -59,14 +62,27 @@ export default function ProfessorDashboardPage() {
           },
         })
 
+        console.log('📡 [Professor Dashboard] API 응답 수신:', { status: response.status, ok: response.ok })
+
         if (!response.ok) {
+          const errorData = await response.json()
+          console.error('❌ [Professor Dashboard] API 에러 응답:', errorData)
           throw new Error('대시보드 데이터를 가져오는데 실패했습니다.')
         }
 
         const data = await response.json()
+        console.log('✅ [Professor Dashboard] API 응답 데이터:', {
+          totalCourses: data.dashboard?.totalCourses,
+          activeSessionsCount: data.dashboard?.activeSessionsCount,
+          activeSessions: data.dashboard?.activeSessions?.map((s: any) => ({
+            id: s.id,
+            courseName: s.courseName,
+            studentCount: s.attendance?.total
+          }))
+        })
         setDashboardData(data.dashboard)
       } catch (error: unknown) {
-        console.error('Fetch dashboard error:', error)
+        console.error('❌ [Professor Dashboard] Fetch 에러:', error)
         const message = error instanceof Error ? error.message : '대시보드를 불러오는 중 오류가 발생했습니다.'
         setError(message)
       } finally {
@@ -78,7 +94,7 @@ export default function ProfessorDashboardPage() {
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000)
-    
+
     return () => clearInterval(interval)
   }, [user, loading])
 
@@ -90,6 +106,8 @@ export default function ProfessorDashboardPage() {
         return <Badge variant="warning">지각</Badge>
       case 'absent':
         return <Badge variant="error">결석</Badge>
+      case 'left_early':
+        return <Badge variant="warning">조퇴</Badge>
       default:
         return <Badge variant="secondary">미확인</Badge>
     }
@@ -278,7 +296,7 @@ export default function ProfessorDashboardPage() {
                   </CardHeader>
                   <CardContent>
                     {/* Attendance Summary */}
-                    <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="grid grid-cols-4 gap-4 mb-6">
                       <div className="text-center p-4 bg-success-50 rounded-lg">
                         <div className="text-2xl font-bold text-success-600">{session.attendance.present}</div>
                         <div className="text-sm text-success-700">출석</div>
@@ -286,6 +304,10 @@ export default function ProfessorDashboardPage() {
                       <div className="text-center p-4 bg-warning-50 rounded-lg">
                         <div className="text-2xl font-bold text-warning-600">{session.attendance.late}</div>
                         <div className="text-sm text-warning-700">지각</div>
+                      </div>
+                      <div className="text-center p-4 bg-warning-50 rounded-lg">
+                        <div className="text-2xl font-bold text-warning-600">{session.attendance.leftEarly}</div>
+                        <div className="text-sm text-warning-700">조퇴</div>
                       </div>
                       <div className="text-center p-4 bg-error-50 rounded-lg">
                         <div className="text-2xl font-bold text-error-600">{session.attendance.absent}</div>
