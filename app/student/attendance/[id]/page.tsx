@@ -71,16 +71,18 @@ export default function AttendancePage() {
       // 조퇴 처리 감지
       if (data.response.statusChanged && data.response.newStatus === 'left_early') {
         console.log('🚪 조퇴 처리됨 - Heartbeat 중지')
+        console.log('📊 상태 업데이트 전 attendanceData:', attendanceData)
+
         setLocationError(`🚪 ${data.response.message || '강의실 범위를 벗어나 조퇴 처리되었습니다.'}`)
         setTrackingStatus('out_of_range')
 
-        // 출석 상태 업데이트
-        if (attendanceData) {
-          setAttendanceData({
-            ...attendanceData,
-            status: 'left_early'
-          })
-        }
+        // 출석 상태 업데이트 (함수형 업데이트로 stale closure 문제 해결)
+        setAttendanceData(prev => {
+          console.log('📊 상태 업데이트 중 - prev:', prev)
+          const updated = prev ? { ...prev, status: 'left_early' as const } : null
+          console.log('📊 상태 업데이트 후 - updated:', updated)
+          return updated
+        })
 
         // Heartbeat 중지
         stopHeartbeatTracking()
@@ -119,7 +121,7 @@ export default function AttendancePage() {
       setLocationError(data.error)
       setTrackingStatus('out_of_range')
     }
-  }, [stopHeartbeatTracking, attendanceData])
+  }, [stopHeartbeatTracking])
 
   // Heartbeat 추적 시작
   const startHeartbeatTracking = useCallback(
