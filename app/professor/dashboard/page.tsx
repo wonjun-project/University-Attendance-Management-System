@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
+
+// ✅ Realtime 사용으로 인한 동적 렌더링 필요
+export const dynamic = 'force-dynamic'
 
 interface AttendanceStudent {
   studentId: string
@@ -45,58 +48,97 @@ export default function ProfessorDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string>('')
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      if (!user || user.role !== 'professor' || loading) {
-        console.log('⏸️ [Professor Dashboard] API 호출 건너뜀:', { user: !!user, role: user?.role, loading })
-        return
-      }
-
-      try {
-        console.log('📡 [Professor Dashboard] API 호출 시작...')
-        setIsLoading(true)
-        const response = await fetch('/api/attendance/professor/dashboard', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-
-        console.log('📡 [Professor Dashboard] API 응답 수신:', { status: response.status, ok: response.ok })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          console.error('❌ [Professor Dashboard] API 에러 응답:', errorData)
-          throw new Error('대시보드 데이터를 가져오는데 실패했습니다.')
-        }
-
-        const data = await response.json()
-        console.log('✅ [Professor Dashboard] API 응답 데이터:', {
-          totalCourses: data.dashboard?.totalCourses,
-          activeSessionsCount: data.dashboard?.activeSessionsCount,
-          activeSessions: data.dashboard?.activeSessions?.map((s: any) => ({
-            id: s.id,
-            courseName: s.courseName,
-            studentCount: s.attendance?.total
-          }))
-        })
-        setDashboardData(data.dashboard)
-      } catch (error: unknown) {
-        console.error('❌ [Professor Dashboard] Fetch 에러:', error)
-        const message = error instanceof Error ? error.message : '대시보드를 불러오는 중 오류가 발생했습니다.'
-        setError(message)
-      } finally {
-        setIsLoading(false)
-      }
+  const fetchDashboardData = useCallback(async () => {
+    if (!user || user.role !== 'professor' || loading) {
+      console.log('⏸️ [Professor Dashboard] API 호출 건너뜀:', { user: !!user, role: user?.role, loading })
+      return
     }
 
+    try {
+      console.log('📡 [Professor Dashboard] API 호출 시작...')
+      setIsLoading(true)
+      const response = await fetch('/api/attendance/professor/dashboard', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      console.log('📡 [Professor Dashboard] API 응답 수신:', { status: response.status, ok: response.ok })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('❌ [Professor Dashboard] API 에러 응답:', errorData)
+        throw new Error('대시보드 데이터를 가져오는데 실패했습니다.')
+      }
+
+      const data = await response.json()
+      console.log('✅ [Professor Dashboard] API 응답 데이터:', {
+        totalCourses: data.dashboard?.totalCourses,
+        activeSessionsCount: data.dashboard?.activeSessionsCount,
+        activeSessions: data.dashboard?.activeSessions?.map((s: any) => ({
+          id: s.id,
+          courseName: s.courseName,
+          studentCount: s.attendance?.total
+        }))
+      })
+      setDashboardData(data.dashboard)
+    } catch (error: unknown) {
+      console.error('❌ [Professor Dashboard] Fetch 에러:', error)
+      const message = error instanceof Error ? error.message : '대시보드를 불러오는 중 오류가 발생했습니다.'
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user, loading])
+
+  useEffect(() => {
+    // 초기 데이터 로드
     fetchDashboardData()
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchDashboardData, 30000)
+    // ✅ Supabase Realtime 구독 설정
+    if (!user || user.role !== 'professor' || loading) {
+      return
+    }
 
-    return () => clearInterval(interval)
-  }, [user, loading])
+    let activeChannels: string[] = []
+
+    // 동적 import를 사용하여 빌드 시 supabase 초기화 방지
+    import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
+      const tracker = getRealtimeTracker()
+
+      // 각 활성 세션에 대해 실시간 구독
+      if (dashboardData?.activeSessions) {
+        dashboardData.activeSessions.forEach(session => {
+          const channelName = tracker.subscribeToSessionAttendance(
+            session.id,
+            () => {
+              console.log('🔄 [Realtime] 출석 데이터 변경 감지 - 대시보드 새로고침')
+              // 실시간 업데이트 시 데이터 다시 가져오기
+              fetchDashboardData()
+            },
+            (error) => {
+              console.error('❌ [Realtime] 구독 오류:', error)
+            }
+          )
+          activeChannels.push(channelName)
+        })
+      }
+    })
+
+    // 정리 함수: 컴포넌트 언마운트 시 모든 구독 해제
+    return () => {
+      if (activeChannels.length > 0) {
+        console.log('🔕 [Professor Dashboard] Realtime 구독 해제')
+        import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
+          const tracker = getRealtimeTracker()
+          activeChannels.forEach(channelName => {
+            tracker.unsubscribe(channelName)
+          })
+        })
+      }
+    }
+  }, [user, loading, fetchDashboardData, dashboardData?.activeSessions])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -351,10 +393,10 @@ export default function ProfessorDashboardPage() {
           )}
         </div>
 
-        {/* Auto-refresh indicator */}
+        {/* Realtime indicator */}
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-500">
-            🔄 30초마다 자동 업데이트됩니다. 마지막 업데이트: {new Date().toLocaleTimeString('ko-KR')}
+            ⚡ 실시간 업데이트 중 (Supabase Realtime)
           </p>
         </div>
       </div>

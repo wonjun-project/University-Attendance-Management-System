@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ✅ 응답 압축 활성화 (gzip/brotli)
+  compress: true,
+
+  // ✅ 프로덕션 최적화
+  swcMinify: true,
+
   images: {
     domains: [],
   },

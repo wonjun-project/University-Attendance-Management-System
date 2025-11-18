@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Badge, LoadingPage } from '@/components/ui'
+
+// ✅ Realtime 사용으로 인한 동적 렌더링 필요
+export const dynamic = 'force-dynamic'
 
 interface AttendanceStatus {
   session: {
@@ -56,36 +59,64 @@ export default function AttendanceDashboard() {
   const [error, setError] = useState<string>('')
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
+  const fetchAttendanceStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/attendance/status?sessionId=${sessionId}`)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '출석 현황을 불러오는데 실패했습니다.')
+      }
+
+      const data = await response.json()
+      setAttendanceData(data)
+      setLastUpdated(new Date())
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '출석 현황을 불러오는데 실패했습니다.'
+      setError(message)
+    } finally {
+      setLoadingData(false)
+    }
+  }, [sessionId])
+
   useEffect(() => {
     if (loading || !user || user.role !== 'professor') {
       return
     }
-    const fetchAttendanceStatus = async () => {
-      try {
-        const response = await fetch(`/api/attendance/status?sessionId=${sessionId}`)
-        
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || '출석 현황을 불러오는데 실패했습니다.')
-        }
 
-        const data = await response.json()
-        setAttendanceData(data)
-        setLastUpdated(new Date())
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : '출석 현황을 불러오는데 실패했습니다.'
-        setError(message)
-      } finally {
-        setLoadingData(false)
-      }
-    }
-
+    // 초기 데이터 로드
     fetchAttendanceStatus()
 
-    // Auto-refresh every 5 seconds (학술제 시연용: 실시간성 향상)
-    const interval = setInterval(fetchAttendanceStatus, 5000)
-    return () => clearInterval(interval)
-  }, [sessionId, loading, user])
+    let channelName: string | null = null
+
+    // ✅ Supabase Realtime 구독 설정 (동적 import)
+    import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
+      const tracker = getRealtimeTracker()
+
+      channelName = tracker.subscribeToSessionAttendance(
+        sessionId,
+        (payload) => {
+          console.log('🔄 [Realtime] 출석 상태 변경 감지:', payload.eventType)
+          // 실시간 업데이트 시 데이터 다시 가져오기
+          fetchAttendanceStatus()
+        },
+        (error) => {
+          console.error('❌ [Realtime] 구독 오류:', error)
+        }
+      )
+    })
+
+    // 정리 함수: 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      if (channelName) {
+        console.log('🔕 [Session Dashboard] Realtime 구독 해제')
+        import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
+          const tracker = getRealtimeTracker()
+          tracker.unsubscribe(channelName!)
+        })
+      }
+    }
+  }, [sessionId, loading, user, fetchAttendanceStatus])
 
   const getStatusColor = (status: string) => {
     switch (status) {

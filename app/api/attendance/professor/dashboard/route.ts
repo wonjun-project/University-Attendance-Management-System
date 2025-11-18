@@ -126,38 +126,64 @@ export async function GET() {
       })
     }
 
-    const coursesWithSessions = await Promise.all(
-      courses.map(async (course: any) => {
-        const { data: recentSessions } = await supabase
-          .from('class_sessions')
-          .select('id, date, status')
-          .eq('course_id', course.id)
-          .order('date', { ascending: false })
-          .limit(1)
+    // ✅ 최적화: N+1 쿼리 문제 해결 - 단일 쿼리로 모든 데이터 가져오기
+    let coursesWithSessions: any[] = []
 
-        const sessions: any[] = Array.isArray(recentSessions) ? recentSessions : []
+    if (courseIds.length > 0) {
+      // 모든 강의의 최신 세션을 한 번에 가져오기
+      const { data: allRecentSessions, error: sessionsError } = await supabase
+        .from('class_sessions')
+        .select('id, date, status, course_id')
+        .in('course_id', courseIds)
+        .order('date', { ascending: false })
 
-        const sessionSummaries = await Promise.all(
-          sessions.map(async (session: any) => {
-            const { data: atts } = await supabase
-              .from('attendances')
-              .select('id, status')
-              .eq('session_id', session.id)
+      if (sessionsError) {
+        console.error('❌ [Professor Dashboard] 세션 조회 에러:', sessionsError)
+      }
 
-            const attendanceRows: any[] = Array.isArray(atts) ? atts : []
-            const total = attendanceRows.length
-            const present = attendanceRows.filter((a: any) => a.status === 'present').length
-            const late = attendanceRows.filter((a: any) => a.status === 'late').length
+      const allSessions: any[] = Array.isArray(allRecentSessions) ? allRecentSessions : []
+
+      // 각 강의별 최신 세션만 필터링
+      const latestSessionsByCourse = new Map<string, any>()
+      allSessions.forEach(session => {
+        if (!latestSessionsByCourse.has(session.course_id)) {
+          latestSessionsByCourse.set(session.course_id, session)
+        }
+      })
+
+      const sessionIds = Array.from(latestSessionsByCourse.values()).map(s => s.id)
+
+      // 모든 세션의 출석 데이터를 한 번에 가져오기
+      let allAttendances: any[] = []
+      if (sessionIds.length > 0) {
+        const { data: attendancesData, error: attendancesError } = await supabase
+          .from('attendances')
+          .select('id, status, session_id')
+          .in('session_id', sessionIds)
+
+        if (attendancesError) {
+          console.error('❌ [Professor Dashboard] 출석 조회 에러:', attendancesError)
+        }
+
+        allAttendances = Array.isArray(attendancesData) ? attendancesData : []
+      }
+
+      // 클라이언트 사이드에서 그룹화
+      coursesWithSessions = courses.map((course: any) => {
+        const latestSession = latestSessionsByCourse.get(course.id)
+        const sessionSummaries = latestSession ? [{
+          id: latestSession.id,
+          date: latestSession.date,
+          isActive: latestSession.status === 'active',
+          attendance: (() => {
+            const sessionAttendances = allAttendances.filter(a => a.session_id === latestSession.id)
+            const total = sessionAttendances.length
+            const present = sessionAttendances.filter(a => a.status === 'present').length
+            const late = sessionAttendances.filter(a => a.status === 'late').length
             const absent = Math.max(0, total - present - late)
-
-            return {
-              id: session.id,
-              date: session.date,
-              isActive: session.status === 'active',
-              attendance: { total, present, late, absent },
-            }
-          })
-        )
+            return { total, present, late, absent }
+          })()
+        }] : []
 
         return {
           id: course.id,
@@ -166,7 +192,14 @@ export async function GET() {
           sessions: sessionSummaries,
         }
       })
-    )
+    } else {
+      coursesWithSessions = courses.map((course: any) => ({
+        id: course.id,
+        name: course.name,
+        courseCode: course.course_code,
+        sessions: [],
+      }))
+    }
 
     const dashboard = {
       totalCourses: courses.length,
