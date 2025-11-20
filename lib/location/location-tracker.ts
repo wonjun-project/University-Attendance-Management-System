@@ -1,10 +1,12 @@
 import { calculateDistance, isWithinRadius } from '@/lib/utils/geo'
+import { GPSPDRFusionManager, type FusedPosition, type Position2D } from '@/lib/fusion/gps-pdr-fusion'
 
 export interface LocationData {
   latitude: number
   longitude: number
   accuracy: number
   timestamp: number
+  source?: 'gps' | 'pdr' | 'fused'
 }
 
 export interface LocationTrackingOptions {
@@ -20,6 +22,9 @@ export class LocationTracker {
   private isTracking = false
   private currentPosition: LocationData | null = null
   private options: Required<LocationTrackingOptions>
+  
+  // Fusion Engine
+  private fusionManager: GPSPDRFusionManager
 
   constructor(
     private onLocationUpdate: (location: LocationData) => void,
@@ -33,6 +38,22 @@ export class LocationTracker {
       trackingInterval: 5 * 60 * 1000, // 5 minutes
       ...options
     }
+
+    // Initialize Fusion Manager
+    this.fusionManager = new GPSPDRFusionManager({
+      pdrConfig: {
+        sensorFrequency: 60,
+        userHeight: 170 // Default height
+      },
+      recalibration: {
+        minGpsAccuracy: 40 // 40m
+      }
+    })
+
+    // Subscribe to Fusion Updates
+    this.fusionManager.onPositionUpdate((fusedPos: FusedPosition) => {
+      this.handleFusedUpdate(fusedPos)
+    })
   }
 
   async startTracking(): Promise<void> {
@@ -46,12 +67,20 @@ export class LocationTracker {
     }
 
     try {
-      // Get initial position
-      await this.getCurrentPosition()
+      // Get initial position to start the Fusion Manager
+      const initialPosition = await this.getCurrentPositionRaw()
+      
+      // Start Fusion Manager (PDR sensors might fail if permission is needed, but we continue)
+      await this.fusionManager.startTracking({
+        lat: initialPosition.latitude,
+        lng: initialPosition.longitude,
+        accuracy: initialPosition.accuracy,
+        timestamp: initialPosition.timestamp
+      })
       
       this.isTracking = true
 
-      // Start continuous tracking
+      // Start continuous GPS tracking
       this.watchId = navigator.geolocation.watchPosition(
         this.handleLocationSuccess.bind(this),
         this.handleLocationError.bind(this),
@@ -64,7 +93,7 @@ export class LocationTracker {
 
       // Set up interval for periodic updates (fallback)
       this.intervalId = setInterval(() => {
-        this.getCurrentPosition().catch(() => {
+        this.getCurrentPositionRaw().catch(() => {
           // Ignore errors from periodic updates
         })
       }, this.options.trackingInterval)
@@ -76,6 +105,7 @@ export class LocationTracker {
 
   stopTracking(): void {
     this.isTracking = false
+    this.fusionManager.stopTracking()
 
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId)
@@ -88,7 +118,40 @@ export class LocationTracker {
     }
   }
 
-  private async getCurrentPosition(): Promise<LocationData> {
+  /**
+   * Raw GPS update handler
+   * Feeds data into Fusion Manager
+   */
+  private handleLocationSuccess(position: GeolocationPosition): void {
+    const rawPosition: Position2D = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      timestamp: Date.now()
+    }
+
+    // Feed to Fusion Manager
+    this.fusionManager.updateGPS(rawPosition)
+  }
+
+  /**
+   * Fused position update handler
+   * Called by Fusion Manager, propagates to UI
+   */
+  private handleFusedUpdate(fusedPos: FusedPosition): void {
+    const locationData: LocationData = {
+      latitude: fusedPos.lat,
+      longitude: fusedPos.lng,
+      accuracy: fusedPos.accuracy ?? 0,
+      timestamp: fusedPos.timestamp,
+      source: fusedPos.source
+    }
+
+    this.currentPosition = locationData
+    this.onLocationUpdate(locationData)
+  }
+
+  private async getCurrentPositionRaw(): Promise<LocationData> {
     return new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -98,8 +161,12 @@ export class LocationTracker {
             accuracy: position.coords.accuracy,
             timestamp: Date.now()
           }
+          // If not tracking yet, resolve immediately. 
+          // If tracking, feed it to fusion manager too.
+          if (this.isTracking) {
+            this.handleLocationSuccess(position)
+          }
           resolve(locationData)
-          this.handleLocationSuccess(position)
         },
         reject,
         {
@@ -109,18 +176,6 @@ export class LocationTracker {
         }
       )
     })
-  }
-
-  private handleLocationSuccess(position: GeolocationPosition): void {
-    const locationData: LocationData = {
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-      accuracy: position.coords.accuracy,
-      timestamp: Date.now()
-    }
-
-    this.currentPosition = locationData
-    this.onLocationUpdate(locationData)
   }
 
   private handleLocationError(error: unknown): void {

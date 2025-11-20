@@ -59,7 +59,7 @@ export class HeadingEstimator {
   constructor(config: HeadingEstimatorConfig = {}) {
     this.config = {
       initialHeading: config.initialHeading ?? 0,
-      gyroWeight: config.gyroWeight ?? 0.98,
+      gyroWeight: config.gyroWeight ?? 0.99, // 자이로스코프 신뢰도 상향 (0.98 -> 0.99)
       enableMagnetometer: config.enableMagnetometer ?? true,
       magnetometerCalibrationInterval: config.magnetometerCalibrationInterval ?? 1000
     }

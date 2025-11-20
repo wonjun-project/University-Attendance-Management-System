@@ -1,14 +1,41 @@
 /**
  * GPS-PDR 융합 관리자
- * GPS Kalman Filter + PDR + Complementary Filter 통합
+ * GPS Kalman Filter + PDR + 2D Kalman Filter 통합
  */
 
 import { GPSKalmanFilter } from '@/lib/utils/gps-filter'
 import { PDRTracker, type PDRPosition, type PDRDelta, cartesianToGPS, gpsToCartesian } from '@/lib/pdr/pdr-tracker'
-import { ComplementaryFilter, type FusedPosition, type Position2D } from './complementary-filter'
+import { KalmanFilter2D } from './kalman-filter'
 
-// Re-export FusedPosition for external use
-export type { FusedPosition, Position2D }
+/**
+ * 2D 위치 (위도, 경도)
+ */
+export interface Position2D {
+  lat: number
+  lng: number
+  accuracy?: number  // 정확도 (미터)
+  timestamp: number
+}
+
+/**
+ * 융합 결과 (Kalman Filter 적용)
+ */
+export interface FusedPosition extends Position2D {
+  /** 융합된 X 좌표 (미터) */
+  x: number
+  /** 융합된 Y 좌표 (미터) */
+  y: number
+  /** 신뢰도 (0~1) */
+  confidence: number
+  /** 사용된 센서 */
+  source: 'gps' | 'pdr' | 'fused'
+  /** 불확실성 (표준편차) */
+  uncertainty?: { x: number, y: number }
+  /** Legacy: GPS 가중치 */
+  gpsWeight: number
+  /** Legacy: PDR 가중치 */
+  pdrWeight: number
+}
 
 /**
  * GPS-PDR 융합 설정
@@ -19,18 +46,17 @@ export interface GPSPDRFusionConfig {
     sensorFrequency?: number
     userHeight?: number
   }
-  /** Complementary Filter 설정 */
-  fusionConfig?: {
-    defaultGpsWeight?: number
-    minGpsAccuracy?: number
+  /** Kalman Filter 설정 */
+  kalmanConfig?: {
+    processNoise?: number // PDR 노이즈 분산
   }
   /** GPS 재보정 전략 */
   recalibration?: {
-    /** 주기적 재보정 간격 (ms, 기본 30초) */
+    /** 주기적 재보정 간격 (ms, 기본 60초) - Kalman Filter에서는 덜 자주 필요 */
     periodicInterval?: number
-    /** 오차 임계값 (m, 이보다 크면 즉시 재보정) */
+    /** 오차 임계값 (m, 이보다 크면 강제 리셋) */
     errorThreshold?: number
-    /** 최소 GPS 정확도 (m, 이보다 나쁘면 재보정 스킵) */
+    /** 최소 GPS 정확도 (m, 이보다 나쁘면 GPS 무시) */
     minGpsAccuracy?: number
   }
 }
@@ -49,8 +75,6 @@ export interface FusionStatistics {
   recalibrationCount: number
   /** 평균 GPS 정확도 (m) */
   averageGpsAccuracy: number
-  /** 평균 GPS 가중치 */
-  averageGpsWeight: number
   /** 현재 융합 위치 */
   currentPosition: FusedPosition | null
   /** 추적 시작 시간 */
@@ -60,16 +84,15 @@ export interface FusionStatistics {
 }
 
 /**
- * 내부 config 타입 (모든 속성이 required)
+ * 내부 config 타입
  */
 interface InternalFusionConfig {
   pdrConfig: {
     sensorFrequency?: number
     userHeight?: number
   }
-  fusionConfig: {
-    defaultGpsWeight?: number
-    minGpsAccuracy?: number
+  kalmanConfig: {
+    processNoise: number
   }
   recalibration: {
     periodicInterval: number
@@ -85,16 +108,16 @@ export class GPSPDRFusionManager {
   private config: InternalFusionConfig
 
   // 구성 요소
-  private gpsKalmanFilter: GPSKalmanFilter
+  private gpsKalmanFilter: GPSKalmanFilter // 1차적으로 GPS 노이즈 제거
   private pdrTracker: PDRTracker
-  private complementaryFilter: ComplementaryFilter
+  private kalmanFilter: KalmanFilter2D
 
   // GPS 원점 (PDR Cartesian 좌표계의 기준점)
   private gpsOrigin: { lat: number, lng: number } | null = null
 
   // 마지막 GPS 위치
   private lastGpsPosition: Position2D | null = null
-  private lastGpsRecalibrationTime = 0
+  private lastRecalibrationTime = 0
 
   // 통계
   private stats = {
@@ -102,7 +125,8 @@ export class GPSPDRFusionManager {
     pdrUpdateCount: 0,
     fusionCount: 0,
     recalibrationCount: 0,
-    gpsAccuracySum: 0
+    gpsAccuracySum: 0,
+    currentPosition: null as FusedPosition | null
   }
 
   // 추적 상태
@@ -117,18 +141,20 @@ export class GPSPDRFusionManager {
   constructor(config: GPSPDRFusionConfig = {}) {
     this.config = {
       pdrConfig: config.pdrConfig ?? {},
-      fusionConfig: config.fusionConfig ?? {},
+      kalmanConfig: {
+        processNoise: config.kalmanConfig?.processNoise ?? 1.0 // 기본값
+      },
       recalibration: {
-        periodicInterval: config.recalibration?.periodicInterval ?? 30000,  // 30초
-        errorThreshold: config.recalibration?.errorThreshold ?? 15,  // 15m
-        minGpsAccuracy: config.recalibration?.minGpsAccuracy ?? 30  // 30m
+        periodicInterval: config.recalibration?.periodicInterval ?? 60000, // 60초
+        errorThreshold: config.recalibration?.errorThreshold ?? 50, // 50m (Kalman이 보정하므로 여유 있게)
+        minGpsAccuracy: config.recalibration?.minGpsAccuracy ?? 40 // 40m
       }
     }
 
     // 구성 요소 초기화
     this.gpsKalmanFilter = new GPSKalmanFilter()
     this.pdrTracker = new PDRTracker(this.config.pdrConfig)
-    this.complementaryFilter = new ComplementaryFilter(this.config.fusionConfig)
+    this.kalmanFilter = new KalmanFilter2D(this.config.kalmanConfig.processNoise)
 
     // PDR 업데이트 콜백 등록
     this.pdrTracker.onPositionUpdate((position, delta) => {
@@ -156,33 +182,54 @@ export class GPSPDRFusionManager {
         lng: initialGpsPosition.lng
       }
 
-      // 2. Kalman Filter 초기화
+      // 2. 필터 초기화
       this.gpsKalmanFilter.reset()
+      this.kalmanFilter.reset()
+      
+      // Kalman 필터 초기 상태 설정 (원점 0,0, 불확실성은 GPS 정확도)
+      const accuracy = initialGpsPosition.accuracy ?? 20
+      this.kalmanFilter.initialize(0, 0, accuracy * accuracy)
 
-      // 3. PDR 초기화
-      const initialized = await this.pdrTracker.initialize()
-      if (!initialized) {
-        throw new Error('PDR 센서 초기화 실패')
+      // 3. PDR 초기화 (실패 시 GPS 전용 모드로 폴백)
+      let pdrInitialized = false
+      try {
+        pdrInitialized = await this.pdrTracker.initialize()
+      } catch (e) {
+        console.warn('PDR 초기화 중 에러 발생:', e)
       }
 
-      // 4. PDR 추적 시작 (원점 (0, 0)에서 시작)
-      await this.pdrTracker.startTracking({
-        x: 0,
-        y: 0,
-        heading: 0
-      })
+      if (!pdrInitialized) {
+        console.warn('⚠️ PDR 센서 초기화 실패 -> GPS 전용 모드로 동작합니다.')
+        // PDR 없이 진행
+      } else {
+        // 4. PDR 추적 시작 (원점 (0, 0)에서 시작)
+        await this.pdrTracker.startTracking({
+          x: 0,
+          y: 0,
+          heading: 0
+        })
+      }
 
       // 5. 초기 위치 설정
       this.lastGpsPosition = initialGpsPosition
-      this.lastGpsRecalibrationTime = Date.now()
+      this.lastRecalibrationTime = Date.now()
 
-      const initialFused = this.complementaryFilter.useGpsOnly(initialGpsPosition)
+      // 초기 위치 전송
+      const initialFused: FusedPosition = {
+        ...initialGpsPosition,
+        x: 0,
+        y: 0,
+        gpsWeight: 1, // Legacy support
+        pdrWeight: 0, // Legacy support
+        confidence: 1.0,
+        source: 'gps'
+      }
       this.onPositionUpdateCallback?.(initialFused)
 
       this.isTracking = true
       this.startTime = Date.now()
 
-      console.log('✅ GPS-PDR 융합 추적 시작')
+      console.log('✅ GPS-PDR 융합 추적 시작 (Kalman Filter)')
       console.log(`   GPS 원점: (${initialGpsPosition.lat.toFixed(6)}, ${initialGpsPosition.lng.toFixed(6)})`)
 
       return true
@@ -194,7 +241,7 @@ export class GPSPDRFusionManager {
   }
 
   /**
-   * GPS 위치 업데이트
+   * GPS 위치 업데이트 (Update Step)
    */
   updateGPS(rawGpsPosition: Position2D): void {
     if (!this.isTracking || !this.gpsOrigin) {
@@ -202,7 +249,7 @@ export class GPSPDRFusionManager {
       return
     }
 
-    // 1. Kalman Filter 적용
+    // 1. GPS 전처리 (노이즈 제거)
     const filteredPosition = this.gpsKalmanFilter.filter(
       rawGpsPosition.lat,
       rawGpsPosition.lng,
@@ -220,137 +267,118 @@ export class GPSPDRFusionManager {
     this.stats.gpsUpdateCount++
     this.stats.gpsAccuracySum += gpsPosition.accuracy ?? 20
 
-    // 2. PDR 위치 가져오기
-    const pdrCartesian = this.pdrTracker.getCurrentPosition()
-    const pdrGps = cartesianToGPS(
-      { x: pdrCartesian.x, y: pdrCartesian.y },
+    // 2. GPS 좌표를 Cartesian으로 변환
+    const gpsCartesian = gpsToCartesian(
+      { lat: gpsPosition.lat, lng: gpsPosition.lng },
       this.gpsOrigin
     )
 
-    const pdrPosition: Position2D = {
-      lat: pdrGps.lat,
-      lng: pdrGps.lng,
-      timestamp: pdrCartesian.timestamp
+    // 3. Kalman Filter Update (보정)
+    // GPS 정확도가 너무 나쁘면 보정 스킵
+    if ((gpsPosition.accuracy ?? 100) <= this.config.recalibration.minGpsAccuracy) {
+      this.kalmanFilter.update(gpsCartesian.x, gpsCartesian.y, gpsPosition.accuracy ?? 20)
+      this.stats.fusionCount++
+    } else {
+      console.log(`GPS 정확도 낮음(${gpsPosition.accuracy}m), 보정 스킵`)
     }
 
-    // 3. GPS + PDR 융합
-    const fusedPosition = this.complementaryFilter.fuse(gpsPosition, pdrPosition)
-    this.stats.fusionCount++
+    // 4. 이상치 확인 (리셋 로직)
+    this.checkRecalibration(gpsPosition, gpsCartesian)
 
-    // 4. 재보정 확인
-    this.checkRecalibration(gpsPosition, pdrPosition, fusedPosition)
-
-    // 5. 콜백 호출
-    this.onPositionUpdateCallback?.(fusedPosition)
+    // 5. 융합된 위치 내보내기
+    this.emitFusedPosition('fused', gpsPosition.timestamp)
   }
 
   /**
-   * PDR 업데이트 처리 (내부 콜백)
+   * PDR 업데이트 처리 (Prediction Step)
    */
   private handlePDRUpdate(pdrPosition: PDRPosition, delta: PDRDelta): void {
     if (!this.isTracking || !this.gpsOrigin) return
 
     this.stats.pdrUpdateCount++
 
-    // GPS 업데이트가 없으면 PDR만 사용
-    if (!this.lastGpsPosition) {
-      const pdrGps = cartesianToGPS(
-        { x: pdrPosition.x, y: pdrPosition.y },
-        this.gpsOrigin
-      )
+    // 1. Kalman Filter Predict (예측)
+    // PDR의 dx, dy를 사용하여 상태 업데이트
+    this.kalmanFilter.predict(delta.dx, delta.dy)
 
-      const pdrOnly: Position2D = {
-        lat: pdrGps.lat,
-        lng: pdrGps.lng,
-        timestamp: pdrPosition.timestamp
-      }
-
-      const fusedPosition = this.complementaryFilter.usePdrOnly(pdrOnly)
-      this.onPositionUpdateCallback?.(fusedPosition)
-    }
+    // 2. 융합된 위치 내보내기
+    this.emitFusedPosition('pdr', pdrPosition.timestamp)
   }
 
   /**
-   * 재보정 확인 및 실행
+   * 현재 Kalman Filter 상태를 기반으로 FusedPosition 생성 및 콜백 호출
    */
-  private checkRecalibration(
-    gpsPosition: Position2D,
-    pdrPosition: Position2D,
-    fusedPosition: FusedPosition
-  ): void {
-    const now = Date.now()
-    const timeSinceLastRecalibration = now - this.lastGpsRecalibrationTime
-
-    // 1. GPS 정확도 확인
-    const gpsAccuracy = gpsPosition.accuracy ?? 100
-    if (gpsAccuracy > this.config.recalibration.minGpsAccuracy) {
-      // GPS 정확도가 너무 나쁘면 재보정 스킵
-      return
-    }
-
-    // 2. 오차 임계값 확인 (GPS와 PDR의 차이)
-    const error = this.calculateDistance(gpsPosition, pdrPosition)
-
-    if (error > this.config.recalibration.errorThreshold) {
-      // 즉시 재보정
-      this.recalibrate(gpsPosition, `오차 임계값 초과 (${error.toFixed(1)}m)`)
-      return
-    }
-
-    // 3. 주기적 재보정
-    if (timeSinceLastRecalibration > this.config.recalibration.periodicInterval) {
-      this.recalibrate(gpsPosition, '주기적 재보정')
-    }
-  }
-
-  /**
-   * PDR 재보정 실행
-   */
-  private recalibrate(gpsPosition: Position2D, reason: string): void {
+  private emitFusedPosition(source: 'gps' | 'pdr' | 'fused', timestamp: number): void {
     if (!this.gpsOrigin) return
 
-    console.log(`🔄 PDR 재보정: ${reason}`)
+    const kPos = this.kalmanFilter.getPosition()
+    const kUncertainty = this.kalmanFilter.getUncertainty()
 
-    // 1. GPS 위치를 새로운 PDR 원점으로 설정
-    const newCartesian = gpsToCartesian(
-      { lat: gpsPosition.lat, lng: gpsPosition.lng },
+    // Cartesian -> GPS 변환
+    const fusedGps = cartesianToGPS(
+      { x: kPos.x, y: kPos.y },
       this.gpsOrigin
     )
 
-    this.pdrTracker.resetPosition({
-      x: newCartesian.x,
-      y: newCartesian.y
-    })
+    const fusedPosition: FusedPosition = {
+      lat: fusedGps.lat,
+      lng: fusedGps.lng,
+      accuracy: Math.max(kUncertainty.stdDevX, kUncertainty.stdDevY),
+      timestamp: timestamp,
+      x: kPos.x,
+      y: kPos.y,
+      confidence: 1.0 / (1.0 + Math.max(kUncertainty.stdDevX, kUncertainty.stdDevY)),
+      source: source,
+      uncertainty: { x: kUncertainty.stdDevX, y: kUncertainty.stdDevY },
+      // Legacy fields
+      gpsWeight: 0.5, 
+      pdrWeight: 0.5
+    }
 
-    // 2. Complementary Filter의 PDR 신뢰도 리셋
-    this.complementaryFilter.resetPdr()
-
-    // 3. 재보정 시간 업데이트
-    this.lastGpsRecalibrationTime = Date.now()
-    this.stats.recalibrationCount++
-
-    // 4. 콜백 호출
-    this.onRecalibrationCallback?.(reason)
+    this.stats.currentPosition = fusedPosition
+    this.onPositionUpdateCallback?.(fusedPosition)
   }
 
   /**
-   * 두 위치 사이의 거리 계산 (Haversine)
+   * 재보정 확인 (안전장치)
+   * Kalman Filter가 발산하거나 GPS와 너무 멀어졌을 때 강제 리셋
    */
-  private calculateDistance(pos1: Position2D, pos2: Position2D): number {
-    const R = 6371e3  // 지구 반지름 (미터)
+  private checkRecalibration(
+    gpsPosition: Position2D,
+    gpsCartesian: { x: number, y: number }
+  ): void {
+    const kPos = this.kalmanFilter.getPosition()
+    
+    // 현재 추정 위치와 GPS 위치 사이의 거리
+    const dx = kPos.x - gpsCartesian.x
+    const dy = kPos.y - gpsCartesian.y
+    const distance = Math.sqrt(dx*dx + dy*dy)
 
-    const lat1 = pos1.lat * Math.PI / 180
-    const lat2 = pos2.lat * Math.PI / 180
-    const deltaLat = (pos2.lat - pos1.lat) * Math.PI / 180
-    const deltaLng = (pos2.lng - pos1.lng) * Math.PI / 180
+    // 임계값 초과 시 리셋
+    if (distance > this.config.recalibration.errorThreshold) {
+      this.recalibrate(gpsCartesian, gpsPosition.accuracy ?? 20, `오차 과다 (${distance.toFixed(1)}m)`)
+      return
+    }
+  }
 
-    const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-              Math.cos(lat1) * Math.cos(lat2) *
-              Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2)
+  /**
+   * 강제 재보정
+   */
+  private recalibrate(gpsCartesian: { x: number, y: number }, accuracy: number, reason: string): void {
+    console.log(`🔄 시스템 재보정: ${reason}`)
+    
+    // Kalman Filter 강제 설정
+    this.kalmanFilter.setState(gpsCartesian.x, gpsCartesian.y, accuracy * accuracy)
+    
+    // PDRTracker 위치도 리셋
+    this.pdrTracker.resetPosition({
+      x: gpsCartesian.x,
+      y: gpsCartesian.y
+      // heading은 유지
+    })
 
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
-    return R * c
+    this.stats.recalibrationCount++
+    this.onRecalibrationCallback?.(reason)
   }
 
   /**
@@ -377,17 +405,9 @@ export class GPSPDRFusionManager {
       ? this.stats.gpsAccuracySum / this.stats.gpsUpdateCount
       : 0
 
-    const lastFused = this.complementaryFilter.getLastFusedPosition()
-    const averageGpsWeight = lastFused?.gpsWeight ?? 0
-
     return {
-      gpsUpdateCount: this.stats.gpsUpdateCount,
-      pdrUpdateCount: this.stats.pdrUpdateCount,
-      fusionCount: this.stats.fusionCount,
-      recalibrationCount: this.stats.recalibrationCount,
+      ...this.stats,
       averageGpsAccuracy,
-      averageGpsWeight,
-      currentPosition: lastFused,
       startTime: this.startTime,
       elapsedTime
     }
@@ -426,7 +446,6 @@ export class GPSPDRFusionManager {
    */
   private handleError(error: Error): void {
     console.error('GPS-PDR 융합 에러:', error)
-
     if (this.onErrorCallback) {
       this.onErrorCallback(error)
     }
@@ -436,7 +455,7 @@ export class GPSPDRFusionManager {
    * 현재 융합 위치 반환
    */
   getCurrentPosition(): Readonly<FusedPosition> | null {
-    return this.complementaryFilter.getLastFusedPosition()
+    return this.stats.currentPosition ? { ...this.stats.currentPosition } : null
   }
 
   /**
@@ -446,19 +465,20 @@ export class GPSPDRFusionManager {
     this.stopTracking()
 
     this.gpsKalmanFilter.reset()
+    this.kalmanFilter.reset()
     this.pdrTracker.reset()
-    this.complementaryFilter.reset()
 
     this.gpsOrigin = null
     this.lastGpsPosition = null
-    this.lastGpsRecalibrationTime = 0
+    this.lastRecalibrationTime = 0
 
     this.stats = {
       gpsUpdateCount: 0,
       pdrUpdateCount: 0,
       fusionCount: 0,
       recalibrationCount: 0,
-      gpsAccuracySum: 0
+      gpsAccuracySum: 0,
+      currentPosition: null
     }
 
     this.startTime = 0
@@ -482,26 +502,11 @@ export class GPSPDRFusionManager {
 }
 
 /**
- * GPS-PDR 융합 유틸리티 함수
- */
-
-/**
- * GPS 정확도 상태 판단
+ * 유틸리티 함수
  */
 export function getGPSAccuracyStatus(accuracy: number): 'excellent' | 'good' | 'fair' | 'poor' {
   if (accuracy <= 10) return 'excellent'
   if (accuracy <= 20) return 'good'
   if (accuracy <= 50) return 'fair'
   return 'poor'
-}
-
-/**
- * 융합 모드 판단
- */
-export function getFusionMode(fusedPosition: FusedPosition): string {
-  const { gpsWeight, pdrWeight } = fusedPosition
-
-  if (gpsWeight > 0.8) return 'GPS 주도'
-  if (pdrWeight > 0.8) return 'PDR 주도'
-  return '균형 융합'
 }

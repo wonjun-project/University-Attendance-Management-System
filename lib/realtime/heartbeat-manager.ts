@@ -10,7 +10,7 @@
  * - 실내/실외 환경 자동 감지 및 모드 전환
  */
 
-import { GPSPDRFusionManager, type FusedPosition } from '@/lib/fusion/gps-pdr-fusion'
+import { GPSPDRFusionManager, type FusedPosition, type Position2D } from '@/lib/fusion/gps-pdr-fusion'
 import { EnvironmentDetector, type EnvironmentType } from '@/lib/fusion/environment-detector'
 
 export interface HeartbeatLocation {
@@ -322,10 +322,10 @@ export class HeartbeatManager {
     }
 
     try {
-      // GPS+PDR 융합 위치 획득
+      // 1. GPS+PDR 융합 위치 획득 (GPS 업데이트 포함)
       const location = await this.getCurrentLocation();
 
-      // 서버에 heartbeat 전송 (PDR 정보 포함)
+      // 2. 서버에 heartbeat 전송 (PDR 정보 포함)
       const response = await fetch('/api/attendance/heartbeat', {
         method: 'POST',
         headers: {
@@ -471,16 +471,50 @@ export class HeartbeatManager {
    * GPS+PDR 융합 위치 획득
    */
   private async getCurrentLocation(): Promise<HeartbeatLocation> {
-    // PDR Fusion 사용 시
+    // 1. 최신 GPS 위치 획득
+    let gpsPosition: HeartbeatLocation;
+    try {
+      gpsPosition = await this.getCurrentLocationGPS();
+    } catch (error) {
+      console.warn('⚠️ GPS 위치 획득 실패, 기존 PDR 추정치 사용 시도:', error);
+      // GPS 실패 시에도 PDR이 살아있다면 PDR 위치 반환 (FusionManager가 알아서 처리)
+      if (this.usePDRFusion && this.fusionManager) {
+        const fused = this.fusionManager.getCurrentPosition();
+        if (fused) {
+          const trackingMode = this.convertSourceToTrackingMode(fused.source);
+          const environment = this.environmentDetector?.getCurrentEnvironment() ?? 'unknown';
+          return {
+            latitude: fused.lat,
+            longitude: fused.lng,
+            accuracy: fused.accuracy ?? 50, // 정확도 감소 가정
+            timestamp: Date.now(),
+            trackingMode,
+            environment,
+            confidence: fused.confidence,
+            gpsWeight: fused.gpsWeight,
+            pdrWeight: fused.pdrWeight
+          };
+        }
+      }
+      throw error; // GPS도 없고 PDR도 없으면 에러
+    }
+
+    // 2. PDR Fusion 사용 시 GPS 업데이트 및 융합 위치 계산
     if (this.usePDRFusion && this.fusionManager) {
       try {
+        // [핵심] 최신 GPS 데이터를 Fusion Engine에 주입하여 보정(Update) 수행
+        this.fusionManager.updateGPS({
+          lat: gpsPosition.latitude,
+          lng: gpsPosition.longitude,
+          accuracy: gpsPosition.accuracy,
+          timestamp: gpsPosition.timestamp
+        });
+
+        // 보정된 최신 융합 위치 가져오기
         const fusedPosition: FusedPosition | null = this.fusionManager.getCurrentPosition();
 
         if (fusedPosition) {
-          // source를 trackingMode로 변환
           const trackingMode = this.convertSourceToTrackingMode(fusedPosition.source);
-
-          // Environment Detector로부터 환경 정보 가져오기
           const environment = this.environmentDetector?.getCurrentEnvironment() ?? 'unknown';
 
           return {
@@ -494,18 +528,14 @@ export class HeartbeatManager {
             gpsWeight: fusedPosition.gpsWeight,
             pdrWeight: fusedPosition.pdrWeight
           };
-        } else {
-          console.warn('⚠️ Fusion position이 null, GPS fallback 사용');
         }
       } catch (error) {
-        console.error('❌ Fusion 위치 획득 실패, GPS fallback 사용:', error);
+        console.error('❌ Fusion 위치 획득 실패, Raw GPS 사용:', error);
       }
     }
 
-    // Fallback: GPS only
-    const gpsPosition = await this.getCurrentLocationGPS();
+    // 3. Fallback: Raw GPS 사용
     const environment = this.environmentDetector?.getCurrentEnvironment() ?? 'unknown';
-
     return {
       ...gpsPosition,
       trackingMode: 'gps-only',

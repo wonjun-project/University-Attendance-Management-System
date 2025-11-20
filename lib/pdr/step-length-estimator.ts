@@ -106,11 +106,25 @@ export class StepLengthEstimator {
 
   /**
    * 적응형 걸음 길이 추정
-   * 최근 걸음들의 평균을 사용하여 동적으로 조정
+   * 최근 걸음들의 평균을 사용하여 동적으로 조정하며, 이상치를 제거합니다.
    */
   estimateAdaptive(currentEstimate: number): number {
-    // 히스토리에 추가
-    this.lengthHistory.push(currentEstimate)
+    // 1. 이상치 필터링 (Outlier Filtering)
+    let filteredEstimate = currentEstimate
+    
+    if (this.lengthHistory.length >= 3) {
+      const average = this.getAverageStepLength()
+      const diff = Math.abs(currentEstimate - average)
+      const threshold = average * 0.3 // 30% 허용
+      
+      if (diff > threshold) {
+        // 이상치로 판단되면 평균값과의 중간값 사용 (Soft Limiting)
+        filteredEstimate = average + (currentEstimate - average) * 0.3
+      }
+    }
+
+    // 2. 히스토리에 추가
+    this.lengthHistory.push(filteredEstimate)
 
     // 히스토리 크기 제한
     if (this.lengthHistory.length > this.MAX_HISTORY) {
@@ -119,7 +133,7 @@ export class StepLengthEstimator {
 
     // 최근 걸음들의 가중 평균 (최근 것일수록 가중치 높음)
     if (this.lengthHistory.length < 3) {
-      return currentEstimate  // 데이터 부족 시 현재 값 사용
+      return filteredEstimate  // 데이터 부족 시 현재 값 사용
     }
 
     const weights = this.lengthHistory.map((_, index) =>
