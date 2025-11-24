@@ -50,9 +50,9 @@ export class SupabaseRealtimeTracker {
   private maxChannels = 50; // 최대 채널 수 제한
 
   constructor() {
-    // 초기화 시 모든 기존 채널 제거 (누적된 채널 정리)
-    console.log('🧹 [Realtime Tracker] 초기화: 모든 기존 채널 제거');
-    supabase.removeAllChannels();
+    // Singleton 패턴이므로 한 번만 생성됨
+    // 페이지 이동 시 cleanup은 useEffect의 return에서 처리
+    console.log('✨ [Realtime Tracker] 초기화');
   }
 
   /**
