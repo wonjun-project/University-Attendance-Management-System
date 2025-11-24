@@ -46,6 +46,14 @@ export type LocationCallback = (payload: RealtimePostgresChangesPayload<Location
 export class SupabaseRealtimeTracker {
   private channels: Map<string, RealtimeChannel> = new Map();
   private isConnected = false;
+  private errorSessions: Set<string> = new Set(); // 에러 발생한 세션 블랙리스트
+  private maxChannels = 50; // 최대 채널 수 제한
+
+  constructor() {
+    // 초기화 시 모든 기존 채널 제거 (누적된 채널 정리)
+    console.log('🧹 [Realtime Tracker] 초기화: 모든 기존 채널 제거');
+    supabase.removeAllChannels();
+  }
 
   /**
    * 교수용 - 특정 세션의 모든 출석 상태 실시간 구독
@@ -57,13 +65,25 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `session-attendance-${sessionId}`;
 
+    // 에러 발생 이력이 있는 세션은 구독하지 않음
+    if (this.errorSessions.has(sessionId)) {
+      console.log('⛔ [Realtime] 에러 이력이 있는 세션, 구독 건너뜀:', sessionId);
+      return '';
+    }
+
+    // 채널 수 제한 확인
+    if (this.channels.size >= this.maxChannels) {
+      console.warn('⚠️ [Realtime] 최대 채널 수 도달:', this.channels.size);
+      return '';
+    }
+
     // 기존 채널이 이미 구독 중이라면 재사용 (중복 생성 방지)
     if (this.channels.has(channelName)) {
       console.log('✅ 기존 채널 재사용:', channelName);
       return channelName;
     }
 
-    console.log('🔔 세션 출석 상태 실시간 구독 시작:', { sessionId, channelName });
+    console.log('🔔 세션 출석 상태 실시간 구독 시작:', { sessionId, channelName, activeChannels: this.channels.size });
 
     const channel = supabase
       .channel(channelName, {
@@ -93,6 +113,11 @@ export class SupabaseRealtimeTracker {
           this.isConnected = true;
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ 세션 출석 구독 오류:', { sessionId, channelName, error: err });
+
+          // 에러 발생한 세션을 블랙리스트에 추가 (재시도 방지)
+          this.errorSessions.add(sessionId);
+          console.log('🚫 [Realtime] 세션 블랙리스트 추가:', sessionId);
+
           if (onError) {
             onError(err || 'Channel subscription error');
           }
@@ -100,6 +125,10 @@ export class SupabaseRealtimeTracker {
           this.unsubscribe(channelName);
         } else if (status === 'TIMED_OUT') {
           console.error('⏱️ 세션 출석 구독 타임아웃:', { sessionId, channelName });
+
+          // 타임아웃도 블랙리스트에 추가
+          this.errorSessions.add(sessionId);
+
           if (onError) {
             onError('Channel subscription timed out');
           }
@@ -368,7 +397,16 @@ export class SupabaseRealtimeTracker {
     });
 
     this.channels.clear();
+    this.errorSessions.clear(); // 블랙리스트도 초기화
     this.isConnected = false;
+  }
+
+  /**
+   * 블랙리스트 초기화 (에러 세션 목록 제거)
+   */
+  clearErrorSessions(): void {
+    console.log('🧹 블랙리스트 초기화');
+    this.errorSessions.clear();
   }
 
   /**
@@ -392,7 +430,10 @@ export class SupabaseRealtimeTracker {
     return {
       isConnected: this.isConnected,
       activeChannels: this.getActiveChannels(),
-      channelCount: this.channels.size
+      channelCount: this.channels.size,
+      maxChannels: this.maxChannels,
+      errorSessionsCount: this.errorSessions.size,
+      errorSessions: Array.from(this.errorSessions)
     };
   }
 }
