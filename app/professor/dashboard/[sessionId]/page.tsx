@@ -88,12 +88,13 @@ export default function AttendanceDashboard() {
     fetchAttendanceStatus()
 
     let channelName: string | null = null
+    let trackerModule: any = null
 
     // ✅ Supabase Realtime 구독 설정 (동적 import)
     import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
-      const tracker = getRealtimeTracker()
+      trackerModule = getRealtimeTracker()
 
-      channelName = tracker.subscribeToSessionAttendance(
+      channelName = trackerModule.subscribeToSessionAttendance(
         sessionId,
         (payload) => {
           console.log('🔄 [Realtime] 출석 상태 변경 감지:', payload.eventType)
@@ -104,16 +105,24 @@ export default function AttendanceDashboard() {
           console.error('❌ [Realtime] 구독 오류:', error)
         }
       )
+    }).catch(error => {
+      console.error('❌ [Realtime] import 에러:', error)
     })
 
     // 정리 함수: 컴포넌트 언마운트 시 구독 해제
     return () => {
       if (channelName) {
-        console.log('🔕 [Session Dashboard] Realtime 구독 해제')
-        import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
-          const tracker = getRealtimeTracker()
-          tracker.unsubscribe(channelName!)
-        })
+        console.log('🔕 [Session Dashboard] Realtime 구독 해제:', channelName)
+
+        if (trackerModule) {
+          trackerModule.unsubscribe(channelName)
+        } else {
+          // tracker가 아직 로드되지 않았다면 동기적으로 import하여 정리
+          import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
+            const tracker = getRealtimeTracker()
+            tracker.unsubscribe(channelName!)
+          })
+        }
       }
     }
   }, [sessionId, loading, user, fetchAttendanceStatus])

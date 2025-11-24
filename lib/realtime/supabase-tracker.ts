@@ -57,9 +57,9 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `session-attendance-${sessionId}`;
 
-    // 기존 채널이 이미 구독 중이라면 재사용
+    // 기존 채널이 이미 구독 중이라면 재사용 (중복 생성 방지)
     if (this.channels.has(channelName)) {
-      console.log('⚠️ 이미 구독 중인 채널:', channelName);
+      console.log('✅ 기존 채널 재사용:', channelName);
       return channelName;
     }
 
@@ -124,8 +124,11 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `session-locations-${sessionId}`;
 
-    // 기존 채널이 있다면 제거
-    this.unsubscribe(channelName);
+    // 기존 채널이 이미 구독 중이라면 재사용 (중복 생성 방지)
+    if (this.channels.has(channelName)) {
+      console.log('✅ 기존 채널 재사용:', channelName);
+      return channelName;
+    }
 
     console.log('📍 세션 위치 로그 실시간 구독 시작:', sessionId);
 
@@ -177,8 +180,11 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `session-status-${sessionId}`;
 
-    // 기존 채널이 있다면 제거
-    this.unsubscribe(channelName);
+    // 기존 채널이 이미 구독 중이라면 재사용 (중복 생성 방지)
+    if (this.channels.has(channelName)) {
+      console.log('✅ 기존 채널 재사용:', channelName);
+      return channelName;
+    }
 
     console.log('🎓 세션 상태 실시간 구독 시작:', sessionId);
 
@@ -221,8 +227,11 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `my-attendance-${attendanceId}`;
 
-    // 기존 채널이 있다면 제거
-    this.unsubscribe(channelName);
+    // 기존 채널이 이미 구독 중이라면 재사용 (중복 생성 방지)
+    if (this.channels.has(channelName)) {
+      console.log('✅ 기존 채널 재사용:', channelName);
+      return channelName;
+    }
 
     console.log('👤 개인 출석 상태 실시간 구독 시작:', attendanceId);
 
@@ -272,8 +281,11 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `attendance-stats-${sessionId}`;
 
-    // 기존 채널이 있다면 제거
-    this.unsubscribe(channelName);
+    // 기존 채널이 이미 구독 중이라면 재사용 (중복 생성 방지)
+    if (this.channels.has(channelName)) {
+      console.log('✅ 기존 채널 재사용:', channelName);
+      return channelName;
+    }
 
     console.log('📈 출석 통계 실시간 구독 시작:', sessionId);
 

@@ -127,12 +127,12 @@ export default function ProfessorDashboardPage() {
       return
     }
 
-    let cleanup: (() => void) | null = null
+    const channelNames: string[] = []
+    let trackerModule: any = null
 
     // 동적 import를 사용하여 빌드 시 supabase 초기화 방지
     import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
-      const tracker = getRealtimeTracker()
-      const channelNames: string[] = []
+      trackerModule = getRealtimeTracker()
 
       console.log('🔔 [Realtime] 구독 설정 시작:', {
         sessionCount: dashboardData.activeSessions.length,
@@ -141,7 +141,7 @@ export default function ProfessorDashboardPage() {
 
       // 각 활성 세션에 대해 실시간 구독
       dashboardData.activeSessions.forEach(session => {
-        const channelName = tracker.subscribeToSessionAttendance(
+        const channelName = trackerModule.subscribeToSessionAttendance(
           session.id,
           () => {
             console.log('🔄 [Realtime] 출석 데이터 변경 감지 - 대시보드 새로고침')
@@ -156,24 +156,28 @@ export default function ProfessorDashboardPage() {
         )
         channelNames.push(channelName)
       })
-
-      // cleanup 함수 설정
-      cleanup = () => {
-        console.log('🔕 [Professor Dashboard] Realtime 구독 해제:', {
-          channelCount: channelNames.length
-        })
-        channelNames.forEach(channelName => {
-          tracker.unsubscribe(channelName)
-        })
-      }
     }).catch(error => {
       console.error('❌ [Realtime] import 에러:', error)
     })
 
     // 정리 함수: 컴포넌트 언마운트 또는 세션 변경 시 모든 구독 해제
     return () => {
-      if (cleanup) {
-        cleanup()
+      console.log('🔕 [Professor Dashboard] Realtime 구독 해제 시작:', {
+        channelCount: channelNames.length
+      })
+
+      if (trackerModule && channelNames.length > 0) {
+        channelNames.forEach(channelName => {
+          trackerModule.unsubscribe(channelName)
+        })
+      } else if (channelNames.length > 0) {
+        // tracker가 아직 로드되지 않았다면 동기적으로 import하여 정리
+        import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
+          const tracker = getRealtimeTracker()
+          channelNames.forEach(channelName => {
+            tracker.unsubscribe(channelName)
+          })
+        })
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
