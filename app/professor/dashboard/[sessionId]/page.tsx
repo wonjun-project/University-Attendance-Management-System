@@ -96,12 +96,12 @@ export default function AttendanceDashboard() {
 
       channelName = trackerModule.subscribeToSessionAttendance(
         sessionId,
-        (payload) => {
+        (payload: any) => {
           console.log('🔄 [Realtime] 출석 상태 변경 감지:', payload.eventType)
           // 실시간 업데이트 시 데이터 다시 가져오기
           fetchAttendanceStatus()
         },
-        (error) => {
+        (error: unknown) => {
           console.error('❌ [Realtime] 구독 오류:', error)
         }
       )
