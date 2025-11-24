@@ -124,15 +124,9 @@ export class SupabaseRealtimeTracker {
           // 에러 발생 시 채널 제거
           this.unsubscribe(channelName);
         } else if (status === 'TIMED_OUT') {
-          console.error('⏱️ 세션 출석 구독 타임아웃:', { sessionId, channelName });
-
-          // 타임아웃도 블랙리스트에 추가
-          this.errorSessions.add(sessionId);
-
-          if (onError) {
-            onError('Channel subscription timed out');
-          }
-          // 타임아웃 시 채널 제거
+          console.warn('⏱️ 세션 출석 구독 타임아웃(경고):', { sessionId, channelName });
+          // 타임아웃은 네트워크 환경 등에 따라 일시적으로 발생할 수 있으므로
+          // 블랙리스트 및 onError 콜백 호출 없이 채널만 정리한다.
           this.unsubscribe(channelName);
         } else if (status === 'CLOSED') {
           console.log('🔒 세션 출석 구독 종료:', { sessionId, channelName });
