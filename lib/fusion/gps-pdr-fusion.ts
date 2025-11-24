@@ -241,6 +241,63 @@ export class GPSPDRFusionManager {
   }
 
   /**
+   * GPS 유효성 검증 (이상치 감지)
+   * @returns GPS가 유효하면 true, 이상치면 false
+   */
+  private isGPSValid(gpsPosition: Position2D, gpsCartesian: { x: number, y: number }): boolean {
+    if (!this.lastGpsPosition) {
+      return true // 첫 GPS 샘플은 항상 유효
+    }
+
+    // 1. 시간 간격 계산 (초)
+    const timeDelta = (gpsPosition.timestamp - this.lastGpsPosition.timestamp) / 1000
+    if (timeDelta <= 0) {
+      return true // 시간 정보가 없거나 역순이면 일단 허용
+    }
+
+    // 2. 이전 GPS 위치를 Cartesian으로 변환
+    const lastGpsCartesian = gpsToCartesian(
+      { lat: this.lastGpsPosition.lat, lng: this.lastGpsPosition.lng },
+      this.gpsOrigin!
+    )
+
+    // 3. 이동 거리 계산
+    const dx = gpsCartesian.x - lastGpsCartesian.x
+    const dy = gpsCartesian.y - lastGpsCartesian.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+
+    // 4. 속도 계산 (m/s)
+    const speed = distance / timeDelta
+
+    // 5. 속도 임계값 검증
+    // 사람이 걷거나 뛰는 속도: 최대 ~10 m/s
+    // GPS 튀는 경우를 거부하기 위해 20 m/s로 설정
+    const MAX_REASONABLE_SPEED = 20 // m/s (~72 km/h)
+
+    if (speed > MAX_REASONABLE_SPEED) {
+      console.warn(`⚠️ GPS 속도 이상: ${speed.toFixed(1)} m/s (거리: ${distance.toFixed(1)}m, 시간: ${timeDelta.toFixed(1)}s)`)
+      return false
+    }
+
+    // 6. Kalman Filter 예측 위치와의 거리 확인
+    const kPos = this.kalmanFilter.getPosition()
+    const kDx = gpsCartesian.x - kPos.x
+    const kDy = gpsCartesian.y - kPos.y
+    const kDistance = Math.sqrt(kDx * kDx + kDy * kDy)
+
+    // Kalman Filter 예측과 너무 멀면 의심
+    // 정확도를 고려하여 임계값 설정 (정확도의 3배 또는 최소 100m)
+    const threshold = Math.max(100, (gpsPosition.accuracy ?? 20) * 3)
+
+    if (kDistance > threshold) {
+      console.warn(`⚠️ GPS가 Kalman 예측과 차이 큼: ${kDistance.toFixed(1)}m (임계값: ${threshold.toFixed(1)}m)`)
+      return false
+    }
+
+    return true
+  }
+
+  /**
    * GPS 위치 업데이트 (Update Step)
    */
   updateGPS(rawGpsPosition: Position2D): void {
@@ -263,7 +320,6 @@ export class GPSPDRFusionManager {
       timestamp: rawGpsPosition.timestamp
     }
 
-    this.lastGpsPosition = gpsPosition
     this.stats.gpsUpdateCount++
     this.stats.gpsAccuracySum += gpsPosition.accuracy ?? 20
 
@@ -273,7 +329,16 @@ export class GPSPDRFusionManager {
       this.gpsOrigin
     )
 
-    // 3. Kalman Filter Update (보정)
+    // ✅ 3. GPS 이상치 감지 (속도 기반 검증)
+    if (this.lastGpsPosition && !this.isGPSValid(gpsPosition, gpsCartesian)) {
+      console.warn('⚠️ GPS 이상치 감지 - 무시하고 PDR만 사용')
+      // GPS가 튀는 경우 업데이트하지 않고 PDR만 사용
+      return
+    }
+
+    this.lastGpsPosition = gpsPosition
+
+    // 4. Kalman Filter Update (보정)
     // GPS 정확도가 너무 나쁘면 보정 스킵
     if ((gpsPosition.accuracy ?? 100) <= this.config.recalibration.minGpsAccuracy) {
       this.kalmanFilter.update(gpsCartesian.x, gpsCartesian.y, gpsPosition.accuracy ?? 20)
@@ -282,10 +347,10 @@ export class GPSPDRFusionManager {
       console.log(`GPS 정확도 낮음(${gpsPosition.accuracy}m), 보정 스킵`)
     }
 
-    // 4. 이상치 확인 (리셋 로직)
+    // 5. 이상치 확인 (리셋 로직)
     this.checkRecalibration(gpsPosition, gpsCartesian)
 
-    // 5. 융합된 위치 내보내기
+    // 6. 융합된 위치 내보내기
     this.emitFusedPosition('fused', gpsPosition.timestamp)
   }
 
@@ -342,21 +407,31 @@ export class GPSPDRFusionManager {
   /**
    * 재보정 확인 (안전장치)
    * Kalman Filter가 발산하거나 GPS와 너무 멀어졌을 때 강제 리셋
+   * ✅ GPS가 유효한 경우에만 재보정
    */
   private checkRecalibration(
     gpsPosition: Position2D,
     gpsCartesian: { x: number, y: number }
   ): void {
     const kPos = this.kalmanFilter.getPosition()
-    
+
     // 현재 추정 위치와 GPS 위치 사이의 거리
     const dx = kPos.x - gpsCartesian.x
     const dy = kPos.y - gpsCartesian.y
     const distance = Math.sqrt(dx*dx + dy*dy)
 
-    // 임계값 초과 시 리셋
+    // ✅ 임계값 초과 시 - 하지만 GPS 정확도가 좋은 경우에만 리셋
     if (distance > this.config.recalibration.errorThreshold) {
-      this.recalibrate(gpsCartesian, gpsPosition.accuracy ?? 20, `오차 과다 (${distance.toFixed(1)}m)`)
+      const gpsAccuracy = gpsPosition.accuracy ?? 20
+
+      // GPS 정확도가 좋은 경우(20m 이하)에만 재보정
+      // 정확도가 나쁜 GPS로는 재보정하지 않음
+      if (gpsAccuracy <= 20) {
+        console.log(`🔄 시스템 재보정: 오차 과다 (${distance.toFixed(1)}m), GPS 정확도: ${gpsAccuracy.toFixed(1)}m`)
+        this.recalibrate(gpsCartesian, gpsAccuracy, `오차 과다 (${distance.toFixed(1)}m)`)
+      } else {
+        console.warn(`⚠️ 재보정 필요하지만 GPS 정확도 불량(${gpsAccuracy.toFixed(1)}m) - 재보정 스킵`)
+      }
       return
     }
   }
