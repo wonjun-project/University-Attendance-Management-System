@@ -92,12 +92,19 @@ export default function ProfessorDashboardPage() {
     }
   }, [user, loading])
 
+  // ✅ 수정: 초기 데이터 로드 (한 번만 실행)
   useEffect(() => {
-    // 초기 데이터 로드
     fetchDashboardData()
+  }, [fetchDashboardData])
 
-    // ✅ Supabase Realtime 구독 설정
+  // ✅ 수정: Realtime 구독 설정 (activeSessions 변경 시에만 실행)
+  useEffect(() => {
     if (!user || user.role !== 'professor' || loading) {
+      return
+    }
+
+    if (!dashboardData?.activeSessions || dashboardData.activeSessions.length === 0) {
+      console.log('⏸️ [Realtime] 활성 세션 없음, 구독 건너뜀')
       return
     }
 
@@ -107,38 +114,46 @@ export default function ProfessorDashboardPage() {
     import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
       const tracker = getRealtimeTracker()
 
+      console.log('🔔 [Realtime] 구독 설정 시작:', {
+        sessionCount: dashboardData.activeSessions.length
+      })
+
       // 각 활성 세션에 대해 실시간 구독
-      if (dashboardData?.activeSessions) {
-        dashboardData.activeSessions.forEach(session => {
-          const channelName = tracker.subscribeToSessionAttendance(
-            session.id,
-            () => {
-              console.log('🔄 [Realtime] 출석 데이터 변경 감지 - 대시보드 새로고침')
-              // 실시간 업데이트 시 데이터 다시 가져오기
-              fetchDashboardData()
-            },
-            (error) => {
-              console.error('❌ [Realtime] 구독 오류:', error)
-            }
-          )
-          activeChannels.push(channelName)
-        })
-      }
+      dashboardData.activeSessions.forEach(session => {
+        const channelName = tracker.subscribeToSessionAttendance(
+          session.id,
+          () => {
+            console.log('🔄 [Realtime] 출석 데이터 변경 감지 - 대시보드 새로고침')
+            // 실시간 업데이트 시 데이터 다시 가져오기
+            fetchDashboardData()
+          },
+          (error) => {
+            console.error('❌ [Realtime] 구독 오류:', error)
+          }
+        )
+        activeChannels.push(channelName)
+      })
+    }).catch(error => {
+      console.error('❌ [Realtime] import 에러:', error)
     })
 
-    // 정리 함수: 컴포넌트 언마운트 시 모든 구독 해제
+    // 정리 함수: 컴포넌트 언마운트 또는 세션 변경 시 모든 구독 해제
     return () => {
       if (activeChannels.length > 0) {
-        console.log('🔕 [Professor Dashboard] Realtime 구독 해제')
+        console.log('🔕 [Professor Dashboard] Realtime 구독 해제:', {
+          channelCount: activeChannels.length
+        })
         import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
           const tracker = getRealtimeTracker()
           activeChannels.forEach(channelName => {
             tracker.unsubscribe(channelName)
           })
+        }).catch(error => {
+          console.error('❌ [Realtime] 구독 해제 에러:', error)
         })
       }
     }
-  }, [user, loading, fetchDashboardData, dashboardData?.activeSessions])
+  }, [user, loading, dashboardData?.activeSessions?.length])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
