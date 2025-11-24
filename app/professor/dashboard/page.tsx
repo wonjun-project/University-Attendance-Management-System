@@ -150,7 +150,7 @@ export default function ProfessorDashboardPage() {
               fetchDashboardDataRef.current()
             }
           },
-          (error) => {
+          (error: unknown) => {
             console.error('❌ [Realtime] 구독 오류:', error)
           }
         )
