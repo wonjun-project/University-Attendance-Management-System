@@ -57,13 +57,21 @@ export class SupabaseRealtimeTracker {
   ): string {
     const channelName = `session-attendance-${sessionId}`;
 
-    // 기존 채널이 있다면 제거
-    this.unsubscribe(channelName);
+    // 기존 채널이 이미 구독 중이라면 재사용
+    if (this.channels.has(channelName)) {
+      console.log('⚠️ 이미 구독 중인 채널:', channelName);
+      return channelName;
+    }
 
-    console.log('🔔 세션 출석 상태 실시간 구독 시작:', sessionId);
+    console.log('🔔 세션 출석 상태 실시간 구독 시작:', { sessionId, channelName });
 
     const channel = supabase
-      .channel(channelName)
+      .channel(channelName, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: '' },
+        },
+      })
       .on(
         'postgres_changes',
         {
@@ -73,17 +81,32 @@ export class SupabaseRealtimeTracker {
           filter: `session_id=eq.${sessionId}`
         },
         (payload) => {
-          console.log('📊 출석 상태 변화 감지:', payload);
+          console.log('📊 출석 상태 변화 감지:', { sessionId, event: payload.eventType, new: payload.new });
           onAttendanceUpdate(payload as RealtimePostgresChangesPayload<AttendanceUpdate>);
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
+        console.log('📡 Realtime 구독 상태 변경:', { channelName, status, error: err });
+
         if (status === 'SUBSCRIBED') {
-          console.log('✅ 세션 출석 구독 성공:', sessionId);
+          console.log('✅ 세션 출석 구독 성공:', { sessionId, channelName });
           this.isConnected = true;
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ 세션 출석 구독 오류');
-          if (onError) onError('Channel subscription error');
+          console.error('❌ 세션 출석 구독 오류:', { sessionId, channelName, error: err });
+          if (onError) {
+            onError(err || 'Channel subscription error');
+          }
+          // 에러 발생 시 채널 제거
+          this.unsubscribe(channelName);
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ 세션 출석 구독 타임아웃:', { sessionId, channelName });
+          if (onError) {
+            onError('Channel subscription timed out');
+          }
+          // 타임아웃 시 채널 제거
+          this.unsubscribe(channelName);
+        } else if (status === 'CLOSED') {
+          console.log('🔒 세션 출석 구독 종료:', { sessionId, channelName });
         }
       });
 

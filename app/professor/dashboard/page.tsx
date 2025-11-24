@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui'
@@ -48,6 +48,9 @@ export default function ProfessorDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string>('')
 
+  // ref로 최신 fetchDashboardData 함수 참조 유지
+  const fetchDashboardDataRef = useRef<() => Promise<void>>()
+
   const fetchDashboardData = useCallback(async () => {
     if (!user || user.role !== 'professor' || loading) {
       console.log('⏸️ [Professor Dashboard] API 호출 건너뜀:', { user: !!user, role: user?.role, loading })
@@ -92,14 +95,30 @@ export default function ProfessorDashboardPage() {
     }
   }, [user, loading])
 
+  // ref 업데이트
+  useEffect(() => {
+    fetchDashboardDataRef.current = fetchDashboardData
+  }, [fetchDashboardData])
+
   // ✅ 수정: 초기 데이터 로드 (한 번만 실행)
   useEffect(() => {
     fetchDashboardData()
   }, [fetchDashboardData])
 
-  // ✅ 수정: Realtime 구독 설정 (activeSessions 변경 시에만 실행)
+  // 세션 ID 배열을 메모이제이션하여 불필요한 재실행 방지
+  const sessionIds = useMemo(() => {
+    return dashboardData?.activeSessions?.map(s => s.id).join(',') || ''
+  }, [dashboardData?.activeSessions])
+
+  // ✅ 수정: Realtime 구독 설정 (세션 ID 변경 시에만 실행)
   useEffect(() => {
-    if (!user || user.role !== 'professor' || loading) {
+    if (!user || user.role !== 'professor' || loading || !sessionIds) {
+      console.log('⏸️ [Realtime] 구독 조건 미충족:', {
+        hasUser: !!user,
+        isProfessor: user?.role === 'professor',
+        loading,
+        hasSessionIds: !!sessionIds
+      })
       return
     }
 
@@ -108,14 +127,16 @@ export default function ProfessorDashboardPage() {
       return
     }
 
-    let activeChannels: string[] = []
+    let cleanup: (() => void) | null = null
 
     // 동적 import를 사용하여 빌드 시 supabase 초기화 방지
     import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
       const tracker = getRealtimeTracker()
+      const channelNames: string[] = []
 
       console.log('🔔 [Realtime] 구독 설정 시작:', {
-        sessionCount: dashboardData.activeSessions.length
+        sessionCount: dashboardData.activeSessions.length,
+        sessionIds: sessionIds
       })
 
       // 각 활성 세션에 대해 실시간 구독
@@ -124,36 +145,39 @@ export default function ProfessorDashboardPage() {
           session.id,
           () => {
             console.log('🔄 [Realtime] 출석 데이터 변경 감지 - 대시보드 새로고침')
-            // 실시간 업데이트 시 데이터 다시 가져오기
-            fetchDashboardData()
+            // ✅ ref를 사용하여 최신 함수 호출 (의존성 배열 문제 해결)
+            if (fetchDashboardDataRef.current) {
+              fetchDashboardDataRef.current()
+            }
           },
           (error) => {
             console.error('❌ [Realtime] 구독 오류:', error)
           }
         )
-        activeChannels.push(channelName)
+        channelNames.push(channelName)
       })
+
+      // cleanup 함수 설정
+      cleanup = () => {
+        console.log('🔕 [Professor Dashboard] Realtime 구독 해제:', {
+          channelCount: channelNames.length
+        })
+        channelNames.forEach(channelName => {
+          tracker.unsubscribe(channelName)
+        })
+      }
     }).catch(error => {
       console.error('❌ [Realtime] import 에러:', error)
     })
 
     // 정리 함수: 컴포넌트 언마운트 또는 세션 변경 시 모든 구독 해제
     return () => {
-      if (activeChannels.length > 0) {
-        console.log('🔕 [Professor Dashboard] Realtime 구독 해제:', {
-          channelCount: activeChannels.length
-        })
-        import('@/lib/realtime/supabase-tracker').then(({ getRealtimeTracker }) => {
-          const tracker = getRealtimeTracker()
-          activeChannels.forEach(channelName => {
-            tracker.unsubscribe(channelName)
-          })
-        }).catch(error => {
-          console.error('❌ [Realtime] 구독 해제 에러:', error)
-        })
+      if (cleanup) {
+        cleanup()
       }
     }
-  }, [user, loading, dashboardData?.activeSessions?.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading, sessionIds])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
