@@ -23,6 +23,9 @@ interface HeartbeatRequest {
   confidence?: number;
   gpsWeight?: number;
   pdrWeight?: number;
+  // GPS 이상치 정보 (서버 조퇴 판단용)
+  gpsAnomalyCount?: number;
+  lastGpsAnomalyDistance?: number;
 }
 
 interface ResolvedLocation {
@@ -104,7 +107,10 @@ export async function POST(request: NextRequest) {
       environment,
       confidence,
       gpsWeight,
-      pdrWeight
+      pdrWeight,
+      // GPS 이상치 정보
+      gpsAnomalyCount,
+      lastGpsAnomalyDistance
     } = body;
 
     // 필수 파라미터 검증
@@ -114,11 +120,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // PDR 메타데이터 로깅
+    // PDR 메타데이터 및 GPS 이상치 로깅
     const pdrInfo = trackingMode
       ? ` [${trackingMode}${environment ? `, ${environment}` : ''}${confidence !== undefined ? `, conf: ${confidence.toFixed(2)}` : ''}]`
       : '';
-    console.log(`💓 Heartbeat [${source}]: ${user.name} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})${pdrInfo}`);
+    const gpsAnomalyInfo = gpsAnomalyCount && gpsAnomalyCount > 0
+      ? ` ⚠️GPS이상치:${gpsAnomalyCount}회${lastGpsAnomalyDistance ? `, ${lastGpsAnomalyDistance.toFixed(0)}m` : ''}`
+      : '';
+    console.log(`💓 Heartbeat [${source}]: ${user.name} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})${pdrInfo}${gpsAnomalyInfo}`);
 
     // 1. 출석 기록 검증 및 세션 정보 확인
     const { data: attendanceData, error: attendanceError } = await supabase
@@ -241,7 +250,74 @@ export async function POST(request: NextRequest) {
 
     const locationValid = distance <= resolvedLocation.radius;
 
-    // 5.5. GPS 정확도 체크 (location_logs 기록 전에 먼저 검증)
+    // 5.5. GPS 이상치 기반 조퇴 판단 (핵심 로직)
+    // GPS 이상치가 연속으로 감지되고, 이상치 거리가 허용 범위를 크게 초과하면 조퇴 처리
+    // 이는 PDR이 실제 이동을 반영하지 못할 때 GPS 원본 데이터를 신뢰하는 로직
+    if (gpsAnomalyCount && gpsAnomalyCount >= 1 && lastGpsAnomalyDistance) {
+      // GPS 이상치 거리가 허용 반경의 2배를 초과하면 실제로 이탈한 것으로 판단
+      const anomalyThreshold = resolvedLocation.radius * 2;
+
+      if (lastGpsAnomalyDistance > anomalyThreshold) {
+        console.warn(`🚨 GPS 이상치 기반 위치 이탈 감지: ${user.name}`);
+        console.warn(`   - 이상치 연속 횟수: ${gpsAnomalyCount}회`);
+        console.warn(`   - 이상치 GPS 거리: ${lastGpsAnomalyDistance.toFixed(0)}m (임계값: ${anomalyThreshold}m)`);
+
+        // 위치 로그 기록 (GPS 이상치 플래그 포함)
+        await supabase
+          .from('location_logs')
+          .insert({
+            attendance_id: attendanceId,
+            latitude: latitude,
+            longitude: longitude,
+            accuracy: accuracy,
+            timestamp: new Date(timestamp).toISOString(),
+            is_valid: false,
+            tracking_mode: trackingMode,
+            environment: environment,
+            confidence: confidence,
+            gps_weight: gpsWeight,
+            pdr_weight: pdrWeight
+          });
+
+        // 조퇴 처리
+        const { error: updateError } = await supabase
+          .from('attendances')
+          .update({
+            status: 'left_early',
+            check_out_time: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', attendanceId);
+
+        if (updateError) {
+          console.error('GPS 이상치 기반 조퇴 처리 실패:', updateError);
+        } else {
+          console.log(`✅ GPS 이상치 기반 조퇴 처리 완료: ${user.name} - GPS 거리 ${lastGpsAnomalyDistance.toFixed(0)}m`);
+        }
+
+        return NextResponse.json({
+          success: true,
+          locationValid: false,
+          statusChanged: true,
+          newStatus: 'left_early',
+          distance: Math.round(lastGpsAnomalyDistance),
+          allowedRadius: resolvedLocation.radius,
+          sessionEnded: false,
+          message: `GPS 이상치 감지: 강의실에서 약 ${Math.round(lastGpsAnomalyDistance)}m 이탈하여 조퇴 처리되었습니다.`,
+          metadata: {
+            source,
+            isBackground,
+            timestamp: new Date().toISOString(),
+            gpsAnomalyCount,
+            lastGpsAnomalyDistance: Math.round(lastGpsAnomalyDistance),
+            ...(trackingMode && { trackingMode }),
+            ...(environment && { environment })
+          }
+        });
+      }
+    }
+
+    // 5.6. GPS 정확도 체크 (location_logs 기록 전에 먼저 검증)
     // GPS 정확도가 너무 낮으면 위치 검증 건너뜀 (실내 GPS 불안정 대응)
     // 50m로 낮춰서 더 정밀한 위치 검증 수행
     if (accuracy > 50) {

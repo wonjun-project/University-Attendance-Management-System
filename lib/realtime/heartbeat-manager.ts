@@ -24,6 +24,9 @@ export interface HeartbeatLocation {
   confidence?: number;
   gpsWeight?: number;
   pdrWeight?: number;
+  // GPS 이상치 정보 (서버 조퇴 판단용)
+  gpsAnomalyCount?: number;
+  lastGpsAnomalyDistance?: number;
 }
 
 export interface HeartbeatResponse {
@@ -345,7 +348,10 @@ export class HeartbeatManager {
           environment: location.environment,
           confidence: location.confidence,
           gpsWeight: location.gpsWeight,
-          pdrWeight: location.pdrWeight
+          pdrWeight: location.pdrWeight,
+          // GPS 이상치 정보 (서버 조퇴 판단용)
+          gpsAnomalyCount: location.gpsAnomalyCount,
+          lastGpsAnomalyDistance: location.lastGpsAnomalyDistance
         }),
       });
 
@@ -526,7 +532,10 @@ export class HeartbeatManager {
             environment,
             confidence: fusedPosition.confidence,
             gpsWeight: fusedPosition.gpsWeight,
-            pdrWeight: fusedPosition.pdrWeight
+            pdrWeight: fusedPosition.pdrWeight,
+            // GPS 이상치 정보 (서버 조퇴 판단용)
+            gpsAnomalyCount: fusedPosition.gpsAnomalyCount,
+            lastGpsAnomalyDistance: fusedPosition.lastGpsAnomalyDistance
           };
         }
       } catch (error) {

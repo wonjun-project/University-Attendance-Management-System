@@ -35,6 +35,10 @@ export interface FusedPosition extends Position2D {
   gpsWeight: number
   /** Legacy: PDR 가중치 */
   pdrWeight: number
+  /** GPS 이상치 연속 감지 횟수 (서버 조퇴 판단용) */
+  gpsAnomalyCount?: number
+  /** 마지막 GPS 이상치 시 감지된 거리 (Kalman 예측과의 차이, 미터) */
+  lastGpsAnomalyDistance?: number
 }
 
 /**
@@ -118,6 +122,13 @@ export class GPSPDRFusionManager {
   // 마지막 GPS 위치
   private lastGpsPosition: Position2D | null = null
   private lastRecalibrationTime = 0
+
+  // GPS 이상치 연속 감지 카운터
+  private consecutiveGpsAnomalyCount = 0
+  private readonly GPS_ANOMALY_RESET_THRESHOLD = 2 // 연속 2회 이상 이상치 감지 시 리셋
+
+  // 마지막으로 감지된 이상치 GPS 위치 (리셋용)
+  private lastAnomalyGpsPosition: { position: Position2D, cartesian: { x: number, y: number } } | null = null
 
   // 통계
   private stats = {
@@ -332,10 +343,45 @@ export class GPSPDRFusionManager {
 
     // ✅ 3. GPS 이상치 감지 (속도 기반 검증)
     if (this.lastGpsPosition && !this.isGPSValid(gpsPosition, gpsCartesian)) {
-      console.warn('⚠️ GPS 이상치 감지 - 무시하고 PDR만 사용')
+      this.consecutiveGpsAnomalyCount++
+      this.lastAnomalyGpsPosition = { position: gpsPosition, cartesian: gpsCartesian }
+
+      console.warn(`⚠️ GPS 이상치 감지 (연속 ${this.consecutiveGpsAnomalyCount}회) - 무시하고 PDR만 사용`)
+
+      // 연속 N회 이상 이상치 감지 시 → 실제로 위치가 변경된 것으로 판단하고 강제 리셋
+      if (this.consecutiveGpsAnomalyCount >= this.GPS_ANOMALY_RESET_THRESHOLD) {
+        console.warn(`🔄 GPS 이상치 연속 ${this.consecutiveGpsAnomalyCount}회 감지 - 실제 이동으로 판단하여 Kalman 필터 강제 리셋`)
+
+        // Kalman 필터를 새 GPS 위치로 강제 리셋
+        const accuracy = gpsPosition.accuracy ?? 20
+        this.kalmanFilter.setState(gpsCartesian.x, gpsCartesian.y, accuracy * accuracy)
+
+        // PDRTracker 위치도 리셋
+        this.pdrTracker.resetPosition({
+          x: gpsCartesian.x,
+          y: gpsCartesian.y
+        })
+
+        // 카운터 및 상태 리셋
+        this.consecutiveGpsAnomalyCount = 0
+        this.lastAnomalyGpsPosition = null
+        this.lastGpsPosition = gpsPosition
+        this.stats.recalibrationCount++
+
+        this.onRecalibrationCallback?.('GPS 이상치 연속 감지로 인한 강제 리셋')
+
+        // 리셋 후 융합 위치 내보내기
+        this.emitFusedPosition('gps', gpsPosition.timestamp)
+        return
+      }
+
       // GPS가 튀는 경우 업데이트하지 않고 PDR만 사용
       return
     }
+
+    // GPS 정상 - 이상치 카운터 리셋
+    this.consecutiveGpsAnomalyCount = 0
+    this.lastAnomalyGpsPosition = null
 
     this.lastGpsPosition = gpsPosition
 
@@ -386,6 +432,14 @@ export class GPSPDRFusionManager {
       this.gpsOrigin
     )
 
+    // GPS 이상치 거리 계산 (마지막 이상치 GPS 위치와 현재 Kalman 위치 차이)
+    let lastGpsAnomalyDistance: number | undefined = undefined
+    if (this.lastAnomalyGpsPosition) {
+      const dx = this.lastAnomalyGpsPosition.cartesian.x - kPos.x
+      const dy = this.lastAnomalyGpsPosition.cartesian.y - kPos.y
+      lastGpsAnomalyDistance = Math.sqrt(dx * dx + dy * dy)
+    }
+
     const fusedPosition: FusedPosition = {
       lat: fusedGps.lat,
       lng: fusedGps.lng,
@@ -397,8 +451,11 @@ export class GPSPDRFusionManager {
       source: source,
       uncertainty: { x: kUncertainty.stdDevX, y: kUncertainty.stdDevY },
       // Legacy fields
-      gpsWeight: 0.5, 
-      pdrWeight: 0.5
+      gpsWeight: 0.5,
+      pdrWeight: 0.5,
+      // GPS 이상치 정보 (서버 조퇴 판단용)
+      gpsAnomalyCount: this.consecutiveGpsAnomalyCount,
+      lastGpsAnomalyDistance
     }
 
     this.stats.currentPosition = fusedPosition
@@ -547,6 +604,8 @@ export class GPSPDRFusionManager {
     this.gpsOrigin = null
     this.lastGpsPosition = null
     this.lastRecalibrationTime = 0
+    this.consecutiveGpsAnomalyCount = 0
+    this.lastAnomalyGpsPosition = null
 
     this.stats = {
       gpsUpdateCount: 0,
