@@ -195,12 +195,13 @@ export const FUSION_CONFIG = {
   /**
    * 위치 차이 임계값 (m)
    *
-   * - 현재값: 50m
-   * - 권장 범위: 30 ~ 100m
+   * - 현재값: 25m
+   * - 권장 범위: 20 ~ 50m
    *
    * GPS와 PDR 위치 차이가 이 값을 초과하면 이상으로 판단합니다.
+   * 강의실 간 거리가 가깝기 때문에 낮춤
    */
-  positionDifferenceThreshold: 50
+  positionDifferenceThreshold: 25
 } as const
 
 /**
@@ -220,12 +221,13 @@ export const ENVIRONMENT_CONFIG = {
   /**
    * 실내 GPS 정확도 임계값 (m)
    *
-   * - 현재값: 100m
-   * - 권장 범위: 80 ~ 150m
+   * - 현재값: 50m
+   * - 권장 범위: 40 ~ 80m
    *
    * GPS 정확도가 이 값보다 나쁘면 실내로 판단합니다.
+   * 강의실 간 거리가 가깝기 때문에 낮춤
    */
-  indoorAccuracyThreshold: 100,
+  indoorAccuracyThreshold: 50,
 
   /**
    * GPS 타임아웃 (ms)
@@ -306,22 +308,22 @@ export const PDR_PRESETS = {
   },
 
   /**
-   * 실내 위주 (PDR 중심)
+   * 실내 위주 (PDR 중심) - 강의실 간 거리가 가까운 환경에 최적화
    */
   indoor: {
     stepDetector: { ...STEP_DETECTOR_CONFIG, threshold: 1.4 },  // 더 민감
     weinberg: WEINBERG_CONFIG,
     recalibration: {
       ...RECALIBRATION_CONFIG,
-      periodicInterval: 45000,  // 45초마다 (덜 빈번)
-      errorThreshold: 15,
-      minGpsAccuracy: 50       // GPS 신뢰도 낮아도 사용
+      periodicInterval: 20000,  // 20초마다 (더 빈번하게)
+      errorThreshold: 10,       // 10m 이하 허용 (정밀도 향상)
+      minGpsAccuracy: 30        // GPS 정확도 30m 이하만 사용
     },
-    fusion: { ...FUSION_CONFIG, defaultGpsWeight: 0.5 },  // PDR 더 신뢰
+    fusion: { ...FUSION_CONFIG, defaultGpsWeight: 0.5, positionDifferenceThreshold: 20 },  // PDR 더 신뢰
     environment: {
       ...ENVIRONMENT_CONFIG,
-      outdoorAccuracyThreshold: 20,  // 더 엄격한 실외 판단
-      indoorAccuracyThreshold: 80    // 더 쉬운 실내 판단
+      outdoorAccuracyThreshold: 15,  // 더 엄격한 실외 판단
+      indoorAccuracyThreshold: 40    // 더 쉬운 실내 판단
     }
   },
 
@@ -353,10 +355,12 @@ export const PDR_PRESETS = {
  * - 'default': 대부분의 경우
  * - 'highPrecision': 정확도가 중요한 경우
  * - 'batterySaver': 배터리가 중요한 경우
- * - 'indoor': 주로 실내 사용
+ * - 'indoor': 주로 실내 사용 (강의실 환경에 최적화)
  * - 'outdoor': 주로 실외 사용
+ *
+ * 대학 강의실 환경에서는 indoor 프리셋 권장
  */
-export const ACTIVE_PRESET: keyof typeof PDR_PRESETS = 'default'
+export const ACTIVE_PRESET: keyof typeof PDR_PRESETS = 'indoor'
 
 /**
  * 현재 활성 설정 가져오기

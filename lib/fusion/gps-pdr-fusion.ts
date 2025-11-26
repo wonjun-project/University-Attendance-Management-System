@@ -146,7 +146,7 @@ export class GPSPDRFusionManager {
       },
       recalibration: {
         periodicInterval: config.recalibration?.periodicInterval ?? 60000, // 60초
-        errorThreshold: config.recalibration?.errorThreshold ?? 50, // 50m (Kalman이 보정하므로 여유 있게)
+        errorThreshold: config.recalibration?.errorThreshold ?? 20, // 20m (강의실 간 거리가 가깝기 때문에 낮춤)
         minGpsAccuracy: config.recalibration?.minGpsAccuracy ?? 40 // 40m
       }
     }
@@ -286,8 +286,9 @@ export class GPSPDRFusionManager {
     const kDistance = Math.sqrt(kDx * kDx + kDy * kDy)
 
     // Kalman Filter 예측과 너무 멀면 의심
-    // 정확도를 고려하여 임계값 설정 (정확도의 3배 또는 최소 100m)
-    const threshold = Math.max(100, (gpsPosition.accuracy ?? 20) * 3)
+    // 정확도를 고려하여 임계값 설정 (정확도의 3배 또는 최소 30m)
+    // 강의실 간 거리가 가깝기 때문에 30m로 낮춤
+    const threshold = Math.max(30, (gpsPosition.accuracy ?? 20) * 3)
 
     if (kDistance > threshold) {
       console.warn(`⚠️ GPS가 Kalman 예측과 차이 큼: ${kDistance.toFixed(1)}m (임계값: ${threshold.toFixed(1)}m)`)
